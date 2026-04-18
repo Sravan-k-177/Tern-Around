@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tern-Around</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="login-screen" id="login-screen" aria-labelledby="login-title">
+      <div class="brand-panel">
+        <p class="eyebrow">Tern-Around</p>
+        <h1 id="login-title">Plan the landmark. Unlock the underdog.</h1>
+        <p>
+          Search countries, states, and places. Explorer Select customers complete small
+          on-site quests to reveal nearby hidden spots.
+        </p>
+      </div>
+
+      <form class="login-card" id="login-form">
+        <label for="name-input">Name</label>
+        <input id="name-input" name="name" type="text" placeholder="Enter name here" required>
+
+        <label for="email-input">Email</label>
+        <input id="email-input" name="email" type="email" placeholder="you@example.com" required>
+
+        <label class="select-toggle" for="select-customer">
+          <input id="select-customer" type="checkbox" checked>
+          <span>Explorer Select customer</span>
+        </label>
+
+        <p class="api-status" id="login-status" aria-live="polite"></p>
+
+        <button class="primary-action" type="submit">Log in</button>
+
+        <button class="text-action" type="button" id="go-signup-button">Create a new account</button>
+      </form>
+    </section>
+
+    <section class="login-screen is-hidden" id="signup-screen" aria-labelledby="signup-title">
+      <div class="brand-panel">
+        <p class="eyebrow">Tern-Around</p>
+        <h1 id="signup-title">Create your travel account.</h1>
+        <p>
+          Sign up to save your profile, unlock Explorer Select access, and keep your quest progress.
+        </p>
+      </div>
+
+      <form class="login-card" id="signup-form">
+        <label for="signup-name-input">Name</label>
+        <input id="signup-name-input" name="name" type="text" placeholder="Enter name here" required>
+
+        <label for="signup-email-input">Email</label>
+        <input id="signup-email-input" name="email" type="email" placeholder="you@example.com" required>
+
+        <label class="select-toggle" for="signup-select-customer">
+          <input id="signup-select-customer" type="checkbox" checked>
+          <span>Explorer Select customer</span>
+        </label>
+
+        <p class="api-status" id="signup-status" aria-live="polite"></p>
+
+        <button class="primary-action" type="submit">Create account</button>
+
+        <button class="text-action" type="button" id="go-login-button">Back to login</button>
+      </form>
+    </section>
+
+    <section class="app-view is-hidden" id="app-view" aria-label="Tern-Around travel app">
+      <header class="top-bar">
+        <div>
+          <p class="eyebrow">Tern-Around</p>
+          <h1>Where to next?</h1>
+        </div>
+        <div class="user-card">
+          <span id="user-name">Guest</span>
+          <strong id="pass-status">Explorer Select</strong>
+          <button type="button" id="logout-button">Log out</button>
+        </div>
+      </header>
+
+      <section class="search-panel" aria-label="Search and filters">
+        <label for="search-input">Search places</label>
+        <div class="api-search-row">
+          <input id="search-input" type="search" placeholder="Try biryani, Jaipur, France, restaurant, or museum">
+          <button type="button" id="api-search-button">Search live</button>
+        </div>
+        <p class="api-status" id="api-status">
+          Curated places are ready. Live search uses OpenStreetMap location data.
+        </p>
+
+        <div class="filter-grid">
+          <label>
+            Country
+            <select id="country-filter"></select>
+          </label>
+          <label>
+            State
+            <select id="state-filter"></select>
+          </label>
+          <label>
+            Place type
+            <select id="type-filter"></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <aside class="place-results" aria-label="Places">
+          <div class="section-heading">
+            <span class="section-kicker">Explore</span>
+            <h2 id="result-count">Places</h2>
+          </div>
+          <div class="place-list" id="place-list"></div>
+        </aside>
+
+        <article class="detail-panel" id="detail-panel" aria-live="polite"></article>
+      </section>
+
+      <section class="booking-panel" aria-labelledby="booking-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">Book</span>
+            <h2 id="booking-title">Flights and stays</h2>
+          </div>
+          <p id="booking-destination">Select a place to build booking searches.</p>
+        </div>
+
+        <form class="booking-form" id="booking-form">
+          <label>
+            From
+            <input id="origin-input" name="origin" type="text" placeholder="Leave blank to use nearest airport">
+          </label>
+          <label>
+            Depart
+            <input id="depart-date-input" name="departDate" type="date" required>
+          </label>
+          <label>
+            Return
+            <input id="return-date-input" name="returnDate" type="date">
+          </label>
+          <label>
+            Travelers
+            <input id="travelers-input" name="travelers" type="number" min="1" max="9" value="1" required>
+          </label>
+          <button class="primary-action" id="booking-search-button" type="submit">Find booking options</button>
+        </form>
+
+        <div class="booking-results" id="results-container" aria-live="polite">
+          <p>Choose dates to compare routes, stays, and packages for the selected place.</p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

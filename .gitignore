@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+
+# Tooling and editor artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
