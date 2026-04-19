@@ -135,16 +135,10 @@ Since your repository is already initialized and connected to GitHub, use:
 ```bash
 git status
 git add .
-git commit -m "Add profile, wishlist, and auth UI/backend updates"
+git commit -m "add a commit message."
 git push
 ```
 
-Optional checks before pushing:
-
-```bash
-git diff --staged
-git log --oneline -5
-```
 
 ## 8. Security Checklist Before Publishing
 
