@@ -22,10 +22,40 @@ body {
   min-height: 100vh;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--ink);
-  background: linear-gradient(120deg, rgba(246, 250, 248, 0.95), rgba(223, 243, 255, 0.88));
+  background:
+    radial-gradient(circle at 8% 8%, rgba(244, 185, 66, 0.28), transparent 32%),
+    radial-gradient(circle at 90% 12%, rgba(8, 127, 91, 0.22), transparent 34%),
+    linear-gradient(122deg, #f6faf8 0%, #dff3ff 48%, #fdf5e8 100%);
   background-attachment: fixed;
   background-size: cover;
   background-position: center;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body::before {
+  top: -140px;
+  left: -120px;
+  width: 420px;
+  height: 420px;
+  border-radius: 45% 55% 55% 45%;
+  background: rgba(8, 127, 91, 0.15);
+  filter: blur(1px);
+}
+
+body::after {
+  right: -120px;
+  bottom: -120px;
+  width: 380px;
+  height: 380px;
+  border-radius: 58% 42% 36% 64%;
+  background: rgba(232, 93, 79, 0.14);
 }
 
 button,
@@ -57,11 +87,24 @@ button {
 }
 
 .login-screen {
+  position: relative;
   min-height: calc(100vh - 56px);
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 0.7fr);
   align-items: center;
   gap: 36px;
+}
+
+.login-screen::before {
+  content: "";
+  position: absolute;
+  inset: 36px -20px;
+  z-index: -1;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.48), transparent 42%),
+    linear-gradient(130deg, rgba(8, 127, 91, 0.14), rgba(223, 243, 255, 0.6), rgba(244, 185, 66, 0.24));
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .brand-panel {
@@ -216,9 +259,43 @@ p {
   margin-bottom: 18px;
 }
 
+.app-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.app-nav-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  padding: 0 14px;
+  color: var(--ink);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.app-nav-button.is-active {
+  color: #ffffff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .top-bar h1 {
   margin-bottom: 0;
   font-size: clamp(2rem, 5vw, 4.2rem);
+}
+
+.secondary-action {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  padding: 0 16px;
+  color: var(--ink);
+  font-weight: 700;
+  background: #eaf5ef;
+}
+
+.secondary-action:hover {
+  border-color: var(--accent);
 }
 
 .user-card {
@@ -567,6 +644,12 @@ p {
   background: #cfeee1;
 }
 
+.detail-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .hidden-panel {
   border: 1px dashed #b8c9c0;
   background: #f4f7f5;
@@ -613,6 +696,83 @@ p {
   margin-bottom: 0;
 }
 
+.profile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-card,
+.wishlist-card {
+  min-height: 260px;
+}
+
+.profile-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.profile-list div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.profile-list dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.profile-list dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.badge-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.badge-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(120deg, #eef8f3, #fff8eb);
+}
+
+.badge-card h3,
+.badge-card p {
+  margin-bottom: 0;
+}
+
+.wishlist-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fcfa;
+  margin-bottom: 10px;
+}
+
+.wishlist-entry h3,
+.wishlist-entry p,
+.wishlist-entry small {
+  margin: 0;
+}
+
+.wishlist-entry p {
+  color: var(--muted);
+}
+
+.wishlist-actions {
+  display: flex;
+  gap: 8px;
+}
+
 @media (max-width: 920px) {
   .login-screen,
   .content-grid {
@@ -630,6 +790,10 @@ p {
   .place-list {
     max-height: none;
   }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -642,6 +806,7 @@ p {
   .api-search-row,
   .ticket-links,
   .travel-actions,
+  .detail-actions-row,
   .booking-form,
   .booking-results {
     grid-template-columns: 1fr;
@@ -662,5 +827,18 @@ p {
   .hidden-panel dl div {
     grid-template-columns: 1fr;
     gap: 3px;
+  }
+
+  .wishlist-entry {
+    display: grid;
+  }
+
+  .wishlist-actions {
+    justify-content: start;
+  }
+
+  .app-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

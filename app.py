@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import secrets
+import smtplib
+from datetime import datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
 import mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, session, send_from_directory
+from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -282,8 +288,12 @@ TABLES_SQL = [
     """
     CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(120) NOT NULL,
+        name VARCHAR(120) NOT NULL UNIQUE,
         email VARCHAR(190) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        email_verified TINYINT(1) NOT NULL DEFAULT 0,
+        verification_code_hash VARCHAR(64) NULL,
+        verification_expires_at DATETIME NULL,
         is_select_customer TINYINT(1) NOT NULL DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -322,6 +332,20 @@ TABLES_SQL = [
         CONSTRAINT fk_quest_place FOREIGN KEY (place_id) REFERENCES places(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    """
+    CREATE TABLE IF NOT EXISTS wishlist_entries (
+        user_id INT NOT NULL,
+        place_id VARCHAR(120) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        country VARCHAR(120) NOT NULL,
+        state VARCHAR(120) NOT NULL,
+        city VARCHAR(120) NOT NULL,
+        type VARCHAR(120) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, place_id),
+        CONSTRAINT fk_wishlist_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 ]
 
 
@@ -333,6 +357,62 @@ def connect_without_database() -> mysql.connector.MySQLConnection:
 
 def connect_database() -> mysql.connector.MySQLConnection:
     return mysql.connector.connect(**MYSQL_CONFIG)
+
+
+def has_column(cursor: mysql.connector.cursor.MySQLCursor, table_name: str, column_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s
+        """,
+        (MYSQL_CONFIG["database"], table_name, column_name),
+    )
+    (count,) = cursor.fetchone() or (0,)
+    return int(count) > 0
+
+
+def hash_verification_code(code: str) -> str:
+    secret = app.secret_key or "tern-around"
+    digest = hmac.new(secret.encode("utf-8"), code.encode("utf-8"), hashlib.sha256)
+    return digest.hexdigest()
+
+
+def generate_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def send_verification_email(recipient: str, username: str, code: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587").strip())
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_from = os.getenv("SMTP_FROM", smtp_user).strip()
+    smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes"}
+
+    if not smtp_host or not smtp_from:
+        raise RuntimeError("SMTP is not configured. Set SMTP_HOST and SMTP_FROM.")
+
+    message = EmailMessage()
+    message["Subject"] = "Verify your Tern-Around account"
+    message["From"] = smtp_from
+    message["To"] = recipient
+    message.set_content(
+        (
+            f"Hi {username},\n\n"
+            "Welcome to Tern-Around.\n"
+            f"Your verification code is: {code}\n\n"
+            "This code expires in 15 minutes.\n"
+            "If you did not request this, you can ignore this email.\n"
+        )
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        if smtp_use_tls:
+            server.starttls()
+        if smtp_user:
+            server.login(smtp_user, smtp_password)
+        server.send_message(message)
 
 
 def ensure_database_exists() -> None:
@@ -355,6 +435,16 @@ def initialize_schema() -> None:
     try:
         for statement in TABLES_SQL:
             cursor.execute(statement)
+
+        # Backward-compatible migration for existing installations.
+        if not has_column(cursor, "users", "password_hash"):
+            cursor.execute("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL")
+        if not has_column(cursor, "users", "email_verified"):
+            cursor.execute("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0")
+        if not has_column(cursor, "users", "verification_code_hash"):
+            cursor.execute("ALTER TABLE users ADD COLUMN verification_code_hash VARCHAR(64) NULL")
+        if not has_column(cursor, "users", "verification_expires_at"):
+            cursor.execute("ALTER TABLE users ADD COLUMN verification_expires_at DATETIME NULL")
 
         cursor.execute("SELECT COUNT(*) FROM places")
         (place_count,) = cursor.fetchone() or (0,)
@@ -438,6 +528,7 @@ def api_bootstrap() -> Any:
         "places": places,
         "catalog": build_catalog(places),
         "completedQuestIds": sorted(list(get_completed_quests(user["id"])) if user else []),
+        "wishlistEntries": get_wishlist_entries(user["id"]) if user else [],
     }
     return jsonify(payload)
 
@@ -448,37 +539,50 @@ def api_login() -> Any:
         return jsonify({"error": "MySQL is not ready."}), 503
 
     data = request.get_json(silent=True) or {}
-    name = str(data.get("name", "")).strip()
-    email = str(data.get("email", "")).strip().lower()
-    is_select_customer = bool(data.get("isSelectCustomer", True))
+    login = str(data.get("login", "")).strip()
+    password = str(data.get("password", ""))
 
-    if not name or not email:
-        return jsonify({"error": "Name and email are required."}), 400
+    if not login or not password:
+        return jsonify({"error": "Username/email and password are required."}), 400
 
     connection = connect_database()
     cursor = connection.cursor(dictionary=True)
 
     try:
         cursor.execute(
-            "SELECT id, name, email, is_select_customer FROM users WHERE email = %s",
-            (email,),
+            """
+            SELECT id, name, email, password_hash, email_verified, is_select_customer
+            FROM users
+            WHERE LOWER(email) = %s OR LOWER(name) = %s
+            LIMIT 1
+            """,
+            (login.lower(), login.lower()),
         )
         user = cursor.fetchone()
 
         if not user:
             return jsonify({"error": "Account not found. Create a new account first."}), 404
 
-        cursor.execute(
-            """
-            UPDATE users
-            SET name = %s, is_select_customer = %s
-            WHERE id = %s
-            """,
-            (name, int(is_select_customer), user["id"]),
-        )
-        user_id = user["id"]
+        password_hash = user.get("password_hash") or ""
+        if not password_hash:
+            return jsonify({"error": "This account has no password set. Please sign up again."}), 400
 
-        connection.commit()
+        if not check_password_hash(password_hash, password):
+            return jsonify({"error": "Invalid password."}), 401
+
+        if not bool(user.get("email_verified")):
+            return (
+                jsonify(
+                    {
+                        "error": "Email is not verified. Enter the verification code sent to your email.",
+                        "requiresVerification": True,
+                        "email": user["email"],
+                    }
+                ),
+                403,
+            )
+
+        user_id = int(user["id"])
         session["user_id"] = user_id
         user = get_user_by_id(user_id)
         return jsonify({"user": user})
@@ -502,32 +606,201 @@ def api_signup() -> Any:
         return jsonify({"error": "MySQL is not ready."}), 503
 
     data = request.get_json(silent=True) or {}
-    name = str(data.get("name", "")).strip()
+    name = str(data.get("username", "")).strip()
     email = str(data.get("email", "")).strip().lower()
-    is_select_customer = bool(data.get("isSelectCustomer", True))
+    password = str(data.get("password", ""))
 
-    if not name or not email:
-        return jsonify({"error": "Name and email are required."}), 400
+    if not name or not email or not password:
+        return jsonify({"error": "Username, email, and password are required."}), 400
+
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
 
     connection = connect_database()
     cursor = connection.cursor(dictionary=True)
 
     try:
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cursor.execute(
+            "SELECT id FROM users WHERE LOWER(email) = %s OR LOWER(name) = %s",
+            (email.lower(), name.lower()),
+        )
         if cursor.fetchone() is not None:
-            return jsonify({"error": "That email already has an account. Log in instead."}), 409
+            return jsonify({"error": "Username or email already exists. Log in instead."}), 409
 
         cursor.execute(
             """
-            INSERT INTO users (name, email, is_select_customer)
-            VALUES (%s, %s, %s)
+            INSERT INTO users (
+                name,
+                email,
+                password_hash,
+                email_verified,
+                verification_code_hash,
+                verification_expires_at,
+                is_select_customer
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (name, email, int(is_select_customer)),
+            (
+                name,
+                email,
+                generate_password_hash(password),
+                0,
+                None,
+                None,
+                1,
+            ),
+        )
+        user_id = cursor.lastrowid
+
+        code = generate_verification_code()
+        cursor.execute(
+            """
+            UPDATE users
+            SET verification_code_hash = %s,
+                verification_expires_at = %s
+            WHERE id = %s
+            """,
+            (hash_verification_code(code), datetime.utcnow() + timedelta(minutes=15), user_id),
         )
         connection.commit()
-        session["user_id"] = cursor.lastrowid
-        user = get_user_by_id(cursor.lastrowid)
-        return jsonify({"user": user}), 201
+        session.pop("user_id", None)
+
+        try:
+            send_verification_email(email, name, code)
+        except Exception as exc:
+            return (
+                jsonify(
+                    {
+                        "error": "Account created, but verification email could not be sent. Configure SMTP and resend.",
+                        "email": email,
+                        "details": str(exc),
+                    }
+                ),
+                502,
+            )
+
+        return (
+            jsonify(
+                {
+                    "ok": True,
+                    "requiresVerification": True,
+                    "email": email,
+                    "message": "Verification code sent. Check your inbox.",
+                }
+            ),
+            201,
+        )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/api/verify-email")
+def api_verify_email() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    code = str(data.get("code", "")).strip()
+
+    if not email or not code:
+        return jsonify({"error": "Email and verification code are required."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, name, email, email_verified, verification_code_hash, verification_expires_at
+            FROM users
+            WHERE LOWER(email) = %s
+            LIMIT 1
+            """,
+            (email,),
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"error": "Account not found."}), 404
+
+        if bool(user.get("email_verified")):
+            session["user_id"] = int(user["id"])
+            return jsonify({"user": get_user_by_id(int(user["id"]))})
+
+        stored_hash = user.get("verification_code_hash") or ""
+        expires_at = user.get("verification_expires_at")
+
+        if not stored_hash or not expires_at:
+            return jsonify({"error": "No active verification code. Request a new code."}), 400
+
+        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+            return jsonify({"error": "Verification code expired. Request a new code."}), 400
+
+        candidate_hash = hash_verification_code(code)
+        if not hmac.compare_digest(stored_hash, candidate_hash):
+            return jsonify({"error": "Invalid verification code."}), 400
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET email_verified = 1,
+                verification_code_hash = NULL,
+                verification_expires_at = NULL
+            WHERE id = %s
+            """,
+            (user["id"],),
+        )
+        connection.commit()
+        session["user_id"] = int(user["id"])
+        return jsonify({"user": get_user_by_id(int(user["id"]))})
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/api/resend-verification")
+def api_resend_verification() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            "SELECT id, name, email, email_verified FROM users WHERE LOWER(email) = %s LIMIT 1",
+            (email,),
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"error": "Account not found."}), 404
+
+        if bool(user.get("email_verified")):
+            return jsonify({"ok": True, "message": "Email is already verified."})
+
+        code = generate_verification_code()
+        cursor.execute(
+            """
+            UPDATE users
+            SET verification_code_hash = %s,
+                verification_expires_at = %s
+            WHERE id = %s
+            """,
+            (hash_verification_code(code), datetime.utcnow() + timedelta(minutes=15), user["id"]),
+        )
+        connection.commit()
+        send_verification_email(user["email"], user["name"], code)
+
+        return jsonify({"ok": True, "message": "Verification code sent."})
     finally:
         cursor.close()
         connection.close()
@@ -570,6 +843,92 @@ def api_complete_quest() -> Any:
         connection.close()
 
 
+@app.get("/api/wishlist")
+def api_get_wishlist() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Login required."}), 401
+
+    return jsonify({"wishlistEntries": get_wishlist_entries(int(user["id"]))})
+
+
+@app.post("/api/wishlist")
+def api_add_wishlist() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    place_id = str(data.get("placeId", "")).strip()
+    name = str(data.get("name", "")).strip()
+    country = str(data.get("country", "")).strip()
+    state = str(data.get("state", "")).strip()
+    city = str(data.get("city", "")).strip()
+    place_type = str(data.get("type", "")).strip()
+
+    if not all([place_id, name, country, state, city, place_type]):
+        return jsonify({"error": "Incomplete place data for wishlist."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO wishlist_entries (user_id, place_id, name, country, state, city, type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                country = VALUES(country),
+                state = VALUES(state),
+                city = VALUES(city),
+                type = VALUES(type)
+            """,
+            (int(user["id"]), place_id, name, country, state, city, place_type),
+        )
+        connection.commit()
+        return jsonify({"ok": True, "wishlistEntries": get_wishlist_entries(int(user["id"]))})
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.delete("/api/wishlist")
+def api_remove_wishlist() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    place_id = str(data.get("placeId", "")).strip()
+
+    if not place_id:
+        return jsonify({"error": "placeId is required."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            "DELETE FROM wishlist_entries WHERE user_id = %s AND place_id = %s",
+            (int(user["id"]), place_id),
+        )
+        connection.commit()
+        return jsonify({"ok": True, "wishlistEntries": get_wishlist_entries(int(user["id"]))})
+    finally:
+        cursor.close()
+        connection.close()
+
+
 @app.errorhandler(404)
 def not_found(_: Any) -> Any:
     return jsonify({"error": "Not found"}), 404
@@ -584,7 +943,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
     try:
         cursor.execute(
-            "SELECT id, name, email, is_select_customer FROM users WHERE id = %s",
+            "SELECT id, name, email, email_verified, is_select_customer FROM users WHERE id = %s",
             (user_id,),
         )
         row = cursor.fetchone()
@@ -593,8 +952,10 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
         return {
             "id": row["id"],
+            "username": row["name"],
             "name": row["name"],
             "email": row["email"],
+            "emailVerified": bool(row.get("email_verified")),
             "isSelectCustomer": bool(row["is_select_customer"]),
         }
     finally:
@@ -718,6 +1079,40 @@ def get_completed_quests(user_id: int) -> set[str]:
             (user_id,),
         )
         return {row[0] for row in cursor.fetchall()}
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def get_wishlist_entries(user_id: int) -> list[dict[str, Any]]:
+    if not DATABASE_READY:
+        return []
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            """
+            SELECT place_id, name, country, state, city, type
+            FROM wishlist_entries
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "placeId": row["place_id"],
+                "name": row["name"],
+                "country": row["country"],
+                "state": row["state"],
+                "city": row["city"],
+                "type": row["type"],
+            }
+            for row in rows
+        ]
     finally:
         cursor.close()
         connection.close()

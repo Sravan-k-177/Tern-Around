@@ -15,6 +15,15 @@ Tern-Around is a Flask + MySQL travel quest app. The backend serves API routes a
 - `requirements.txt`: Python dependencies
 - `.env.example`: Environment variable template
 
+## Key Features
+
+- Username/email + password authentication
+- Real email verification flow with SMTP and 6-digit code
+- Explore view with curated places + live location search
+- Profile section with contact details and visited quest badges
+- Wishlist section with add/remove saved locations
+- Quest completion tracking persisted in MySQL
+
 ## 1. Clone The Repository
 
 ```bash
@@ -61,6 +70,15 @@ Required variables:
 - `MYSQL_PASSWORD`: MySQL password
 - `MYSQL_DATABASE`: Database name (default `tern_around`)
 
+For real email verification, also set:
+
+- `SMTP_HOST`: SMTP server host (example `smtp.gmail.com`)
+- `SMTP_PORT`: SMTP port (usually `587`)
+- `SMTP_USER`: SMTP account username
+- `SMTP_PASSWORD`: SMTP app password / SMTP password
+- `SMTP_FROM`: Sender email address
+- `SMTP_USE_TLS`: `true` or `false`
+
 Example `.env`:
 
 ```env
@@ -70,6 +88,12 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=your_mysql_password
 MYSQL_DATABASE=tern_around
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
+SMTP_FROM=your_email@gmail.com
+SMTP_USE_TLS=true
 ```
 
 Important:
@@ -99,29 +123,27 @@ Then open:
 
 - `http://127.0.0.1:5000/`
 
-## 7. Push To GitHub
+Important:
 
-If this folder is not a git repository yet:
+- Do not open `index.html` directly from your file manager (`file://...`).
+- The frontend must be loaded through Flask at `http://127.0.0.1:5000/` so `/api/*` requests work.
+
+## 7. Push New Changes To GitHub
+
+Since your repository is already initialized and connected to GitHub, use:
 
 ```bash
-git init
+git status
 git add .
-git commit -m "Initial commit"
+git commit -m "Add profile, wishlist, and auth UI/backend updates"
+git push
 ```
 
-Create a new empty GitHub repo named `Tern-Around`, then connect and push:
+Optional checks before pushing:
 
 ```bash
-git branch -M main
-git remote add origin https://github.com/<your-username>/Tern-Around.git
-git push -u origin main
-```
-
-If the remote already exists, update it:
-
-```bash
-git remote set-url origin https://github.com/<your-username>/Tern-Around.git
-git push -u origin main
+git diff --staged
+git log --oneline -5
 ```
 
 ## 8. Security Checklist Before Publishing
@@ -134,3 +156,16 @@ git push -u origin main
 
 - If MySQL is not reachable, API endpoints requiring DB access return `503`.
 - Frontend uses third-party public data endpoints (Wikipedia, CountriesNow, Overpass, OurAirports) and does not require API keys.
+
+## Auth + Profile APIs
+
+- `POST /api/signup`
+- `POST /api/verify-email`
+- `POST /api/resend-verification`
+- `POST /api/login`
+- `POST /api/logout`
+- `GET /api/bootstrap`
+- `POST /api/quests/complete`
+- `GET /api/wishlist`
+- `POST /api/wishlist`
+- `DELETE /api/wishlist`

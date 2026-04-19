@@ -6,8 +6,12 @@ USE tern_around;
 
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
+  name VARCHAR(120) NOT NULL UNIQUE,
   email VARCHAR(190) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  verification_code_hash VARCHAR(64) NULL,
+  verification_expires_at DATETIME NULL,
   is_select_customer TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -42,4 +46,17 @@ CREATE TABLE IF NOT EXISTS quest_completions (
   PRIMARY KEY (user_id, place_id),
   CONSTRAINT fk_quest_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_quest_place FOREIGN KEY (place_id) REFERENCES places(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wishlist_entries (
+  user_id INT NOT NULL,
+  place_id VARCHAR(120) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  country VARCHAR(120) NOT NULL,
+  state VARCHAR(120) NOT NULL,
+  city VARCHAR(120) NOT NULL,
+  type VARCHAR(120) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, place_id),
+  CONSTRAINT fk_wishlist_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,16 +1,30 @@
 const loginScreen = document.querySelector("#login-screen");
 const signupScreen = document.querySelector("#signup-screen");
+const verifyScreen = document.querySelector("#verify-screen");
 const appView = document.querySelector("#app-view");
 const loginForm = document.querySelector("#login-form");
 const signupForm = document.querySelector("#signup-form");
-const nameInput = document.querySelector("#name-input");
-const emailInput = document.querySelector("#email-input");
-const selectCustomerToggle = document.querySelector("#select-customer");
-const signupNameInput = document.querySelector("#signup-name-input");
+const verifyForm = document.querySelector("#verify-form");
+const loginIdentifierInput = document.querySelector("#login-identifier-input");
+const loginPasswordInput = document.querySelector("#login-password-input");
+const signupUsernameInput = document.querySelector("#signup-username-input");
 const signupEmailInput = document.querySelector("#signup-email-input");
-const signupSelectCustomerToggle = document.querySelector("#signup-select-customer");
+const signupPasswordInput = document.querySelector("#signup-password-input");
+const verifyEmailInput = document.querySelector("#verify-email-input");
+const verifyCodeInput = document.querySelector("#verify-code-input");
 const goSignupButton = document.querySelector("#go-signup-button");
 const goLoginButton = document.querySelector("#go-login-button");
+const resendCodeButton = document.querySelector("#resend-code-button");
+const verifyBackLoginButton = document.querySelector("#verify-back-login-button");
+const navExploreButton = document.querySelector("#nav-explore-button");
+const navProfileButton = document.querySelector("#nav-profile-button");
+const navWishlistButton = document.querySelector("#nav-wishlist-button");
+const exploreSection = document.querySelector("#explore-section");
+const profileSection = document.querySelector("#profile-section");
+const wishlistSection = document.querySelector("#wishlist-section");
+const profileContactDetails = document.querySelector("#profile-contact-details");
+const profileBadges = document.querySelector("#profile-badges");
+const wishlistList = document.querySelector("#wishlist-list");
 const userName = document.querySelector("#user-name");
 const passStatus = document.querySelector("#pass-status");
 const logoutButton = document.querySelector("#logout-button");
@@ -32,6 +46,13 @@ const returnDateInput = document.querySelector("#return-date-input");
 const travelersInput = document.querySelector("#travelers-input");
 const loginStatus = document.querySelector("#login-status");
 const signupStatus = document.querySelector("#signup-status");
+const verifyStatus = document.querySelector("#verify-status");
+const LOCAL_APP_ORIGIN = "http://127.0.0.1:5000";
+
+if (window.location.protocol === "file:") {
+  // The app must be served by Flask so /api routes stay same-origin.
+  window.location.replace(`${LOCAL_APP_ORIGIN}/`);
+}
 
 const WIKIPEDIA_IMAGE_API = "https://en.wikipedia.org/w/api.php";
 const COUNTRIES_NOW_STATES_API = "https://countriesnow.space/api/v0.1/countries/states";
@@ -329,20 +350,37 @@ let completedQuestIds = new Set();
 let currentUser = null;
 let lastApiRequestAt = 0;
 let activeBookingPlaceId = "";
+let activeAppSection = "explore";
 let locationCatalog = [];
 let airportCatalog = [];
 let userAirport = null;
 let userAirportLookupStarted = false;
+let pendingVerificationEmail = "";
+let wishlistEntries = [];
 const imageCache = new Map();
 const coordinateCache = new Map();
 const destinationAirportCache = new Map();
 let backendPlaces = [];
 
 function showAuthScreen(screen) {
-  const isLogin = screen === "login";
+  loginScreen.classList.toggle("is-hidden", screen !== "login");
+  signupScreen.classList.toggle("is-hidden", screen !== "signup");
+  verifyScreen.classList.toggle("is-hidden", screen !== "verify");
+}
 
-  loginScreen.classList.toggle("is-hidden", !isLogin);
-  signupScreen.classList.toggle("is-hidden", isLogin);
+function getWishlistIds() {
+  return new Set(wishlistEntries.map((entry) => entry.placeId));
+}
+
+function setAppSection(section) {
+  activeAppSection = section;
+  exploreSection.classList.toggle("is-hidden", section !== "explore");
+  profileSection.classList.toggle("is-hidden", section !== "profile");
+  wishlistSection.classList.toggle("is-hidden", section !== "wishlist");
+
+  navExploreButton.classList.toggle("is-active", section === "explore");
+  navProfileButton.classList.toggle("is-active", section === "profile");
+  navWishlistButton.classList.toggle("is-active", section === "wishlist");
 }
 
 function slugify(value) {
@@ -376,8 +414,10 @@ async function fetchJson(url, options = {}) {
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
 
+    let payload = null;
+
     try {
-      const payload = await response.json();
+      payload = await response.json();
       if (payload?.error) {
         errorMessage = payload.error;
       }
@@ -385,7 +425,9 @@ async function fetchJson(url, options = {}) {
       // Keep the fallback error message.
     }
 
-    throw new Error(errorMessage);
+    const requestError = new Error(errorMessage);
+    requestError.payload = payload;
+    throw requestError;
   }
 
   return response.json();
@@ -397,17 +439,22 @@ async function loadBootstrapData() {
     backendPlaces = data.places || [];
     locationCatalog = data.catalog || [];
     completedQuestIds = new Set(data.completedQuestIds || []);
+    wishlistEntries = data.wishlistEntries || [];
     currentUser = data.user || null;
     loginStatus.textContent = "";
     signupStatus.textContent = "";
+    verifyStatus.textContent = "";
 
     if (currentUser) {
       loginScreen.classList.add("is-hidden");
       signupScreen.classList.add("is-hidden");
+      verifyScreen.classList.add("is-hidden");
       appView.classList.remove("is-hidden");
+      setAppSection(activeAppSection);
     } else {
       appView.classList.add("is-hidden");
       showAuthScreen("login");
+      setAppSection("explore");
     }
 
     renderApp();
@@ -918,6 +965,7 @@ function renderDetailPanel() {
   const questComplete = completedQuestIds.has(place.id);
   const isSelectCustomer = Boolean(currentUser?.isSelectCustomer);
   const canReveal = isSelectCustomer && questComplete;
+  const isInWishlist = getWishlistIds().has(place.id);
 
   detailPanel.innerHTML = `
     <img class="detail-image" src="${getPlaceImage(place)}" alt="${place.name}">
@@ -964,9 +1012,14 @@ function renderDetailPanel() {
         <span class="section-kicker">Location quest</span>
         <h3>${questComplete ? "Quest complete" : "Complete this visit challenge"}</h3>
         <p>${place.challenge}</p>
-        <button class="primary-action" type="button" id="complete-quest">
-          ${questComplete ? "Completed" : "Complete quest"}
-        </button>
+        <div class="detail-actions-row">
+          <button class="primary-action" type="button" id="complete-quest">
+            ${questComplete ? "Completed" : "Complete quest"}
+          </button>
+          <button class="secondary-action" type="button" id="wishlist-toggle">
+            ${isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
+          </button>
+        </div>
       </section>
 
       <section class="hidden-panel ${canReveal ? "is-unlocked" : ""}" aria-label="Hidden underdog spot">
@@ -986,6 +1039,46 @@ function renderDetailPanel() {
       });
 
       completedQuestIds = new Set(data.completedQuestIds || []);
+      renderApp();
+    } catch (error) {
+      apiStatus.textContent = error.message;
+    }
+  });
+
+  document.querySelector("#wishlist-toggle").addEventListener("click", async () => {
+    if (!currentUser) {
+      apiStatus.textContent = "Log in to save places to your wishlist.";
+      return;
+    }
+
+    try {
+      if (isInWishlist) {
+        const data = await fetchJson("/api/wishlist", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ placeId: place.id })
+        });
+        wishlistEntries = data.wishlistEntries || [];
+      } else {
+        const data = await fetchJson("/api/wishlist", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            placeId: place.id,
+            name: place.name,
+            country: place.country,
+            state: place.state,
+            city: place.city,
+            type: place.type
+          })
+        });
+        wishlistEntries = data.wishlistEntries || [];
+      }
+
       renderApp();
     } catch (error) {
       apiStatus.textContent = error.message;
@@ -1034,10 +1127,113 @@ function renderUser() {
     return;
   }
 
-  userName.textContent = currentUser.name;
+  userName.textContent = currentUser.username || currentUser.name;
   passStatus.textContent = currentUser.isSelectCustomer
     ? "Explorer Select"
     : "Standard traveler";
+}
+
+function renderProfileDetails() {
+  if (!currentUser) {
+    profileContactDetails.innerHTML = "<p>Log in to view profile details.</p>";
+    profileBadges.innerHTML = "<p>Your visited badges will appear here.</p>";
+    return;
+  }
+
+  profileContactDetails.innerHTML = `
+    <dl class="profile-list">
+      <div><dt>Username</dt><dd>${escapeHtml(currentUser.username || currentUser.name || "-")}</dd></div>
+      <div><dt>Email</dt><dd>${escapeHtml(currentUser.email || "-")}</dd></div>
+      <div><dt>Email status</dt><dd>${currentUser.emailVerified ? "Verified" : "Not verified"}</dd></div>
+      <div><dt>Plan</dt><dd>${currentUser.isSelectCustomer ? "Explorer Select" : "Standard traveler"}</dd></div>
+    </dl>
+  `;
+
+  const visitedIds = Array.from(completedQuestIds);
+  const allPlaces = getAllPlaces();
+  const visitedPlaces = visitedIds
+    .map((id) => allPlaces.find((place) => place.id === id))
+    .filter(Boolean);
+
+  if (visitedPlaces.length === 0) {
+    profileBadges.innerHTML = "<p>Complete location quests to unlock badges.</p>";
+    return;
+  }
+
+  profileBadges.innerHTML = `
+    <div class="badge-grid">
+      ${visitedPlaces
+        .map(
+          (place) => `
+            <article class="badge-card">
+              <span class="section-kicker">Badge unlocked</span>
+              <h3>${escapeHtml(place.name)}</h3>
+              <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderWishlist() {
+  if (!currentUser) {
+    wishlistList.innerHTML = "<p>Log in to start building your wishlist.</p>";
+    return;
+  }
+
+  if (wishlistEntries.length === 0) {
+    wishlistList.innerHTML = "<p>No wishlist items yet. Open a place and tap Add to wishlist.</p>";
+    return;
+  }
+
+  wishlistList.innerHTML = wishlistEntries
+    .map(
+      (entry) => `
+        <article class="wishlist-entry" data-place-id="${escapeHtml(entry.placeId)}">
+          <div>
+            <h3>${escapeHtml(entry.name)}</h3>
+            <p>${escapeHtml(entry.city)}, ${escapeHtml(entry.state)}, ${escapeHtml(entry.country)}</p>
+            <small>${escapeHtml(entry.type)}</small>
+          </div>
+          <div class="wishlist-actions">
+            <button type="button" class="secondary-action" data-action="open">Open</button>
+            <button type="button" class="text-action" data-action="remove">Remove</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+
+  wishlistList.querySelectorAll(".wishlist-entry").forEach((element) => {
+    const placeId = element.getAttribute("data-place-id");
+    const openButton = element.querySelector('button[data-action="open"]');
+    const removeButton = element.querySelector('button[data-action="remove"]');
+
+    openButton?.addEventListener("click", () => {
+      selectedPlaceId = placeId || "";
+      setAppSection("explore");
+      renderApp();
+    });
+
+    removeButton?.addEventListener("click", async () => {
+      try {
+        const data = await fetchJson("/api/wishlist", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ placeId })
+        });
+
+        wishlistEntries = data.wishlistEntries || [];
+        renderApp();
+      } catch (error) {
+        apiStatus.textContent = error.message;
+      }
+    });
+  });
 }
 
 function renderBookingDestination() {
@@ -1528,10 +1724,13 @@ async function searchLiveLocations() {
 }
 
 function renderApp() {
+  setAppSection(activeAppSection);
   renderUser();
   renderFilters();
   renderPlaceList();
   renderDetailPanel();
+  renderProfileDetails();
+  renderWishlist();
   renderBookingDestination();
 }
 
@@ -1547,15 +1746,23 @@ loginForm.addEventListener("submit", async (event) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: nameInput.value.trim(),
-        email: emailInput.value.trim(),
-        isSelectCustomer: selectCustomerToggle.checked
+        login: loginIdentifierInput.value.trim(),
+        password: loginPasswordInput.value
       })
     });
 
     loginStatus.textContent = "";
     await loadBootstrapData();
   } catch (error) {
+    if (error.payload?.requiresVerification && error.payload?.email) {
+      pendingVerificationEmail = error.payload.email;
+      verifyEmailInput.value = pendingVerificationEmail;
+      verifyStatus.textContent = "Email is not verified yet. Enter the code sent to your inbox.";
+      loginStatus.textContent = "";
+      showAuthScreen("verify");
+      return;
+    }
+
     loginStatus.textContent = error.message;
   }
 });
@@ -1566,34 +1773,94 @@ signupForm.addEventListener("submit", async (event) => {
   signupStatus.textContent = "Creating account...";
 
   try {
-    await fetchJson("/api/signup", {
+    const data = await fetchJson("/api/signup", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: signupNameInput.value.trim(),
+        username: signupUsernameInput.value.trim(),
         email: signupEmailInput.value.trim(),
-        isSelectCustomer: signupSelectCustomerToggle.checked
+        password: signupPasswordInput.value
       })
     });
 
+    pendingVerificationEmail = data.email || signupEmailInput.value.trim().toLowerCase();
+    verifyEmailInput.value = pendingVerificationEmail;
+    verifyCodeInput.value = "";
     signupStatus.textContent = "";
-    await loadBootstrapData();
+    verifyStatus.textContent = data.message || "Verification code sent. Check your email.";
+    showAuthScreen("verify");
   } catch (error) {
     signupStatus.textContent = error.message;
+  }
+});
+
+verifyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  verifyStatus.textContent = "Verifying...";
+
+  try {
+    await fetchJson("/api/verify-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: verifyEmailInput.value.trim(),
+        code: verifyCodeInput.value.trim()
+      })
+    });
+
+    verifyStatus.textContent = "";
+    await loadBootstrapData();
+  } catch (error) {
+    verifyStatus.textContent = error.message;
+  }
+});
+
+resendCodeButton.addEventListener("click", async () => {
+  const email = verifyEmailInput.value.trim() || pendingVerificationEmail;
+
+  if (!email) {
+    verifyStatus.textContent = "Enter your email to resend the verification code.";
+    return;
+  }
+
+  verifyStatus.textContent = "Sending a new code...";
+
+  try {
+    const data = await fetchJson("/api/resend-verification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    });
+
+    verifyStatus.textContent = data.message || "Verification code sent.";
+  } catch (error) {
+    verifyStatus.textContent = error.message;
   }
 });
 
 goSignupButton.addEventListener("click", () => {
   loginStatus.textContent = "";
   signupStatus.textContent = "";
+  verifyStatus.textContent = "";
   showAuthScreen("signup");
 });
 
 goLoginButton.addEventListener("click", () => {
   loginStatus.textContent = "";
   signupStatus.textContent = "";
+  verifyStatus.textContent = "";
+  showAuthScreen("login");
+});
+
+verifyBackLoginButton.addEventListener("click", () => {
+  verifyStatus.textContent = "";
   showAuthScreen("login");
 });
 
@@ -1614,11 +1881,28 @@ logoutButton.addEventListener("click", async () => {
   showAuthScreen("login");
   loginForm.reset();
   signupForm.reset();
-  selectCustomerToggle.checked = true;
-  signupSelectCustomerToggle.checked = true;
+  verifyForm.reset();
+  pendingVerificationEmail = "";
+  wishlistEntries = [];
+  activeAppSection = "explore";
   loginStatus.textContent = "";
   signupStatus.textContent = "";
+  verifyStatus.textContent = "";
   renderApp();
+});
+
+navExploreButton.addEventListener("click", () => {
+  setAppSection("explore");
+});
+
+navProfileButton.addEventListener("click", () => {
+  setAppSection("profile");
+  renderProfileDetails();
+});
+
+navWishlistButton.addEventListener("click", () => {
+  setAppSection("wishlist");
+  renderWishlist();
 });
 
 searchInput.addEventListener("input", renderApp);

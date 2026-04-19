@@ -19,16 +19,11 @@
       </div>
 
       <form class="login-card" id="login-form">
-        <label for="name-input">Name</label>
-        <input id="name-input" name="name" type="text" placeholder="Enter name here" required>
+        <label for="login-identifier-input">Username or Email</label>
+        <input id="login-identifier-input" name="loginIdentifier" type="text" placeholder="username or you@example.com" required>
 
-        <label for="email-input">Email</label>
-        <input id="email-input" name="email" type="email" placeholder="you@example.com" required>
-
-        <label class="select-toggle" for="select-customer">
-          <input id="select-customer" type="checkbox" checked>
-          <span>Explorer Select customer</span>
-        </label>
+        <label for="login-password-input">Password</label>
+        <input id="login-password-input" name="password" type="password" placeholder="Enter password" required>
 
         <p class="api-status" id="login-status" aria-live="polite"></p>
 
@@ -48,22 +43,44 @@
       </div>
 
       <form class="login-card" id="signup-form">
-        <label for="signup-name-input">Name</label>
-        <input id="signup-name-input" name="name" type="text" placeholder="Enter name here" required>
+        <label for="signup-username-input">Username</label>
+        <input id="signup-username-input" name="username" type="text" placeholder="Choose a username" required>
 
         <label for="signup-email-input">Email</label>
         <input id="signup-email-input" name="email" type="email" placeholder="you@example.com" required>
 
-        <label class="select-toggle" for="signup-select-customer">
-          <input id="signup-select-customer" type="checkbox" checked>
-          <span>Explorer Select customer</span>
-        </label>
+        <label for="signup-password-input">Password</label>
+        <input id="signup-password-input" name="password" type="password" placeholder="Create password" required>
 
         <p class="api-status" id="signup-status" aria-live="polite"></p>
 
         <button class="primary-action" type="submit">Create account</button>
 
         <button class="text-action" type="button" id="go-login-button">Back to login</button>
+      </form>
+    </section>
+
+    <section class="login-screen is-hidden" id="verify-screen" aria-labelledby="verify-title">
+      <div class="brand-panel">
+        <p class="eyebrow">Tern-Around</p>
+        <h1 id="verify-title">Verify your email.</h1>
+        <p>
+          We sent a 6-digit verification code to your email. Enter it below to activate your account.
+        </p>
+      </div>
+
+      <form class="login-card" id="verify-form">
+        <label for="verify-email-input">Email</label>
+        <input id="verify-email-input" name="email" type="email" placeholder="you@example.com" required>
+
+        <label for="verify-code-input">Verification code</label>
+        <input id="verify-code-input" name="code" type="text" minlength="6" maxlength="6" placeholder="123456" required>
+
+        <p class="api-status" id="verify-status" aria-live="polite"></p>
+
+        <button class="primary-action" type="submit">Verify email</button>
+        <button class="text-action" type="button" id="resend-code-button">Resend code</button>
+        <button class="text-action" type="button" id="verify-back-login-button">Back to login</button>
       </form>
     </section>
 
@@ -80,76 +97,126 @@
         </div>
       </header>
 
-      <section class="search-panel" aria-label="Search and filters">
-        <label for="search-input">Search places</label>
-        <div class="api-search-row">
-          <input id="search-input" type="search" placeholder="Try biryani, Jaipur, France, restaurant, or museum">
-          <button type="button" id="api-search-button">Search live</button>
-        </div>
-        <p class="api-status" id="api-status">
-          Curated places are ready. Live search uses OpenStreetMap location data.
-        </p>
+      <nav class="app-nav" aria-label="App sections">
+        <button type="button" class="app-nav-button is-active" id="nav-explore-button">Explore</button>
+        <button type="button" class="app-nav-button" id="nav-profile-button">Profile</button>
+        <button type="button" class="app-nav-button" id="nav-wishlist-button">Wishlist</button>
+      </nav>
 
-        <div class="filter-grid">
-          <label>
-            Country
-            <select id="country-filter"></select>
-          </label>
-          <label>
-            State
-            <select id="state-filter"></select>
-          </label>
-          <label>
-            Place type
-            <select id="type-filter"></select>
-          </label>
-        </div>
-      </section>
+      <section id="explore-section">
+        <section class="search-panel" aria-label="Search and filters">
+          <label for="search-input">Search places</label>
+          <div class="api-search-row">
+            <input id="search-input" type="search" placeholder="Try biryani, Jaipur, France, restaurant, or museum">
+            <button type="button" id="api-search-button">Search live</button>
+          </div>
+          <p class="api-status" id="api-status">
+            Curated places are ready. Live search uses OpenStreetMap location data.
+          </p>
 
-      <section class="content-grid">
-        <aside class="place-results" aria-label="Places">
+          <div class="filter-grid">
+            <label>
+              Country
+              <select id="country-filter"></select>
+            </label>
+            <label>
+              State
+              <select id="state-filter"></select>
+            </label>
+            <label>
+              Place type
+              <select id="type-filter"></select>
+            </label>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <aside class="place-results" aria-label="Places">
+            <div class="section-heading">
+              <span class="section-kicker">Explore</span>
+              <h2 id="result-count">Places</h2>
+            </div>
+            <div class="place-list" id="place-list"></div>
+          </aside>
+
+          <article class="detail-panel" id="detail-panel" aria-live="polite"></article>
+        </section>
+
+        <section class="booking-panel" aria-labelledby="booking-title">
           <div class="section-heading">
-            <span class="section-kicker">Explore</span>
-            <h2 id="result-count">Places</h2>
+            <div>
+              <span class="section-kicker">Book</span>
+              <h2 id="booking-title">Flights and stays</h2>
+            </div>
+            <p id="booking-destination">Select a place to build booking searches.</p>
           </div>
-          <div class="place-list" id="place-list"></div>
-        </aside>
 
-        <article class="detail-panel" id="detail-panel" aria-live="polite"></article>
+          <form class="booking-form" id="booking-form">
+            <label>
+              From
+              <input id="origin-input" name="origin" type="text" placeholder="Leave blank to use nearest airport">
+            </label>
+            <label>
+              Depart
+              <input id="depart-date-input" name="departDate" type="date" required>
+            </label>
+            <label>
+              Return
+              <input id="return-date-input" name="returnDate" type="date">
+            </label>
+            <label>
+              Travelers
+              <input id="travelers-input" name="travelers" type="number" min="1" max="9" value="1" required>
+            </label>
+            <button class="primary-action" id="booking-search-button" type="submit">Find booking options</button>
+          </form>
+
+          <div class="booking-results" id="results-container" aria-live="polite">
+            <p>Choose dates to compare routes, stays, and packages for the selected place.</p>
+          </div>
+        </section>
       </section>
 
-      <section class="booking-panel" aria-labelledby="booking-title">
-        <div class="section-heading">
-          <div>
-            <span class="section-kicker">Book</span>
-            <h2 id="booking-title">Flights and stays</h2>
+      <section class="is-hidden" id="profile-section" aria-label="Profile section">
+        <div class="content-grid profile-grid">
+          <article class="detail-panel profile-card">
+            <div class="detail-content">
+              <div class="section-heading">
+                <div>
+                  <span class="section-kicker">Profile</span>
+                  <h2>Contact details</h2>
+                </div>
+              </div>
+              <div id="profile-contact-details"></div>
+            </div>
+          </article>
+
+          <article class="detail-panel profile-card">
+            <div class="detail-content">
+              <div class="section-heading">
+                <div>
+                  <span class="section-kicker">Achievements</span>
+                  <h2>Visited badges</h2>
+                </div>
+              </div>
+              <div id="profile-badges"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="is-hidden" id="wishlist-section" aria-label="Wishlist section">
+        <article class="detail-panel wishlist-card">
+          <div class="detail-content">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">Wishlist</span>
+                <h2>Saved locations</h2>
+              </div>
+            </div>
+            <div id="wishlist-list"></div>
           </div>
-          <p id="booking-destination">Select a place to build booking searches.</p>
-        </div>
-
-        <form class="booking-form" id="booking-form">
-          <label>
-            From
-            <input id="origin-input" name="origin" type="text" placeholder="Leave blank to use nearest airport">
-          </label>
-          <label>
-            Depart
-            <input id="depart-date-input" name="departDate" type="date" required>
-          </label>
-          <label>
-            Return
-            <input id="return-date-input" name="returnDate" type="date">
-          </label>
-          <label>
-            Travelers
-            <input id="travelers-input" name="travelers" type="number" min="1" max="9" value="1" required>
-          </label>
-          <button class="primary-action" id="booking-search-button" type="submit">Find booking options</button>
-        </form>
-
-        <div class="booking-results" id="results-container" aria-live="polite">
-          <p>Choose dates to compare routes, stays, and packages for the selected place.</p>
-        </div>
+        </article>
       </section>
     </section>
   </main>
