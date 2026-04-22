@@ -62,6 +62,8 @@ const OVERPASS_API = "https://overpass-api.de/api/interpreter";
 const ATTRACTION_SEARCH_RADIUS_METERS = 12000;
 const ATTRACTION_FETCH_LIMIT = 80;
 const ATTRACTION_RESULT_LIMIT = 24;
+const VISIT_CAPTURE_RADIUS_METERS = 500;
+const ALLOW_PHOTO_ONLY_FALLBACK = true;
 const PLACEHOLDER_IMAGE =
   "data:image/svg+xml;charset=UTF-8," +
   encodeURIComponent(`
@@ -357,6 +359,7 @@ let userAirport = null;
 let userAirportLookupStarted = false;
 let pendingVerificationEmail = "";
 let wishlistEntries = [];
+let activeCameraStream = null;
 let profileExtras = {
   phone: "",
   phoneVerified: false,
@@ -401,6 +404,118 @@ function escapeHtml(value) {
 
     return entities[character];
   });
+}
+
+function getLocalDateInputValue(dateValue) {
+  const date = new Date(dateValue);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+}
+
+function requestGeoPosition(options) {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
+
+async function getCurrentGeoPosition() {
+  if (!navigator.geolocation) {
+    throw new Error("Geolocation is not supported in this browser.");
+  }
+
+  try {
+    // First attempt: high-accuracy (GPS if available).
+    return await requestGeoPosition({
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 0
+    });
+  } catch (primaryError) {
+    try {
+      // Retry: allow network-assisted location (Wi-Fi/IP/cell) from browser provider.
+      return await requestGeoPosition({
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 60000
+      });
+    } catch (secondaryError) {
+      throw new Error(
+        "Could not get device location. Turn on Location Services, keep Wi-Fi enabled, allow browser location permission, and retry."
+      );
+    }
+  }
+}
+
+function markPlaceVisitedWithCapture(place, capturedAt, captureMeta = {}) {
+  return fetchJson("/api/quests/complete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ placeId: place.id })
+  }).then((data) => {
+    completedQuestIds = new Set(data.completedQuestIds || []);
+    upsertVisitedEntry(place.id, {
+      visitedOn: getLocalDateInputValue(capturedAt),
+      capturedAt: capturedAt.toISOString(),
+      ...captureMeta
+    });
+    saveProfileExtras();
+  });
+}
+
+function stopCameraStream() {
+  if (!activeCameraStream) {
+    return;
+  }
+
+  activeCameraStream.getTracks().forEach((track) => track.stop());
+  activeCameraStream = null;
+}
+
+async function startCameraStream(videoElement) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Camera access is not supported in this browser.");
+  }
+
+  stopCameraStream();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: {
+        ideal: "environment"
+      }
+    },
+    audio: false
+  });
+  activeCameraStream = stream;
+  videoElement.srcObject = stream;
+  await videoElement.play();
+}
+
+function upsertVisitedEntry(placeId, updates = {}) {
+  const existingEntry = profileExtras.notesByPlaceId?.[placeId] || {};
+  profileExtras.notesByPlaceId[placeId] = {
+    ...existingEntry,
+    ...updates
+  };
+}
+
+function buildCapturedPhotoThumbnailDataUrl(sourceCanvas) {
+  const maxWidth = 320;
+  const sourceWidth = sourceCanvas.width || 320;
+  const sourceHeight = sourceCanvas.height || 240;
+  const scale = Math.min(1, maxWidth / sourceWidth);
+  const thumbnailCanvas = document.createElement("canvas");
+  thumbnailCanvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  thumbnailCanvas.height = Math.max(1, Math.round(sourceHeight * scale));
+
+  const thumbnailContext = thumbnailCanvas.getContext("2d");
+  if (!thumbnailContext) {
+    return "";
+  }
+
+  thumbnailContext.drawImage(sourceCanvas, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
+  return thumbnailCanvas.toDataURL("image/jpeg", 0.72);
 }
 
 function getProfileStorageKey() {
@@ -1016,6 +1131,7 @@ function renderPlaceList() {
 }
 
 function renderDetailPanel() {
+  stopCameraStream();
   const place = getSelectedPlace();
 
   if (!place) {
@@ -1085,6 +1201,17 @@ function renderDetailPanel() {
           <button class="secondary-action" type="button" id="wishlist-toggle">
             ${isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
           </button>
+          <button class="secondary-action" type="button" id="capture-visit-button">
+            ${questComplete ? "Capture again" : "Capture visit"}
+          </button>
+        </div>
+        <div class="visit-capture-panel is-hidden" id="visit-capture-panel">
+          <video id="visit-camera-preview" playsinline muted></video>
+          <div class="visit-capture-actions">
+            <button class="primary-action" type="button" id="capture-photo-button">Take photo and verify</button>
+            <button class="text-action" type="button" id="close-capture-button">Close</button>
+          </div>
+          <p class="capture-status" id="capture-status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -1148,6 +1275,119 @@ function renderDetailPanel() {
       renderApp();
     } catch (error) {
       apiStatus.textContent = error.message;
+    }
+  });
+
+  const captureVisitButton = document.querySelector("#capture-visit-button");
+  const visitCapturePanel = document.querySelector("#visit-capture-panel");
+  const cameraPreview = document.querySelector("#visit-camera-preview");
+  const capturePhotoButton = document.querySelector("#capture-photo-button");
+  const closeCaptureButton = document.querySelector("#close-capture-button");
+  const captureStatus = document.querySelector("#capture-status");
+
+  captureVisitButton?.addEventListener("click", async () => {
+    if (!currentUser) {
+      apiStatus.textContent = "Log in first to capture and verify visits.";
+      return;
+    }
+
+    visitCapturePanel?.classList.remove("is-hidden");
+    captureStatus.textContent = "Requesting camera access...";
+    captureStatus.classList.remove("success", "error");
+
+    try {
+      await startCameraStream(cameraPreview);
+      captureStatus.textContent = "Camera ready. Capture your visit photo on-site.";
+    } catch (error) {
+      captureStatus.textContent = error.message;
+      captureStatus.classList.add("error");
+    }
+  });
+
+  closeCaptureButton?.addEventListener("click", () => {
+    stopCameraStream();
+    visitCapturePanel?.classList.add("is-hidden");
+    captureStatus.textContent = "";
+    captureStatus.classList.remove("success", "error");
+  });
+
+  capturePhotoButton?.addEventListener("click", async () => {
+    if (!cameraPreview) {
+      return;
+    }
+
+    capturePhotoButton.disabled = true;
+    closeCaptureButton.disabled = true;
+    captureStatus.textContent = "Capturing photo and checking location...";
+    captureStatus.classList.remove("success", "error");
+
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = cameraPreview.videoWidth || 720;
+      canvas.height = cameraPreview.videoHeight || 480;
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Could not capture photo from camera.");
+      }
+
+      context.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+
+      const capturedAt = new Date();
+      const capturedPhotoDataUrl = buildCapturedPhotoThumbnailDataUrl(canvas);
+      try {
+        const geolocationResult = await getCurrentGeoPosition();
+        const userCoords = {
+          lat: geolocationResult.coords.latitude,
+          lon: geolocationResult.coords.longitude
+        };
+        const placeCoords = await getPlaceCoordinates(place);
+
+        if (!placeCoords) {
+          throw new Error("Could not determine destination coordinates for this place.");
+        }
+
+        const distanceMeters = Math.round(getDistanceKm(userCoords, placeCoords) * 1000);
+
+        if (distanceMeters > VISIT_CAPTURE_RADIUS_METERS) {
+          throw new Error(
+            `You are ${distanceMeters}m away. Move within ${VISIT_CAPTURE_RADIUS_METERS}m and try again.`
+          );
+        }
+
+        await markPlaceVisitedWithCapture(place, capturedAt, {
+          captureMethod: "geo-verified",
+          capturePhotoDataUrl: capturedPhotoDataUrl || undefined,
+          captureLat: Number(userCoords.lat.toFixed(6)),
+          captureLon: Number(userCoords.lon.toFixed(6)),
+          captureDistanceMeters: distanceMeters
+        });
+
+        captureStatus.textContent = `Visit captured. Verified at ${distanceMeters}m from ${place.name}.`;
+        captureStatus.classList.add("success");
+      } catch (geoError) {
+        if (!ALLOW_PHOTO_ONLY_FALLBACK) {
+          throw geoError;
+        }
+
+        await markPlaceVisitedWithCapture(place, capturedAt, {
+          captureMethod: "photo-only",
+          capturePhotoDataUrl: capturedPhotoDataUrl || undefined
+        });
+
+        captureStatus.textContent =
+          "GPS unavailable on this device. Visit marked using photo-only capture.";
+        captureStatus.classList.add("success");
+      }
+
+      stopCameraStream();
+      renderApp();
+    } catch (error) {
+      captureStatus.textContent = error.message;
+      captureStatus.classList.add("error");
+    } finally {
+      capturePhotoButton.disabled = false;
+      closeCaptureButton.disabled = false;
     }
   });
 }
@@ -1257,28 +1497,25 @@ function renderProfileDetails() {
         ${visitedPlaces
           .map((place) => {
             const visitedEntry = profileExtras.notesByPlaceId?.[place.id] || {};
+            const visitedOnLabel = visitedEntry.visitedOn
+              ? new Date(visitedEntry.visitedOn).toLocaleDateString()
+              : "Capture pending";
+            const captureDistance = Number.isFinite(visitedEntry.captureDistanceMeters)
+              ? `${visitedEntry.captureDistanceMeters}m from target`
+              : visitedEntry.captureMethod === "photo-only"
+                ? "Photo-only capture (GPS unavailable)"
+                : "Manual quest completion";
 
             return `
-              <article class="badge-card">
-                <span class="section-kicker">Visited location</span>
-                <h3>${escapeHtml(place.name)}</h3>
-                <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
-                <form class="location-note-form" data-place-id="${escapeHtml(place.id)}">
-                  <label for="visited-date-${escapeHtml(place.id)}">Visited on</label>
-                  <input id="visited-date-${escapeHtml(place.id)}" name="visitedOn" type="date" value="${escapeHtml(
-                    visitedEntry.visitedOn || ""
-                  )}">
-
-                  <label for="visited-note-${escapeHtml(place.id)}">Your notes</label>
-                  <textarea id="visited-note-${escapeHtml(place.id)}" name="note" rows="3" placeholder="What did you like there?">${escapeHtml(
-                    visitedEntry.note || ""
-                  )}</textarea>
-
-                  <div class="location-note-actions">
-                    <button class="secondary-action" type="submit">Save location details</button>
-                    <small class="api-status" data-role="save-status"></small>
-                  </div>
-                </form>
+              <article class="badge-card compact-badge${visitedEntry.capturePhotoDataUrl ? " has-photo" : ""}">
+                <div class="badge-copy">
+                  <span class="section-kicker">Visited location</span>
+                  <h3>${escapeHtml(place.name)}</h3>
+                  <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
+                  <small class="badge-meta">Visited: ${escapeHtml(visitedOnLabel)}</small>
+                  <small class="badge-meta">${escapeHtml(captureDistance)}</small>
+                </div>
+                ${visitedEntry.capturePhotoDataUrl ? `<img class="badge-photo" src="${visitedEntry.capturePhotoDataUrl}" alt="Visit capture for ${escapeHtml(place.name)}">` : ""}
               </article>
             `;
           })
@@ -1423,29 +1660,6 @@ function renderProfileDetails() {
     }
   });
 
-  profileBadges.querySelectorAll(".location-note-form").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-
-      const placeId = form.getAttribute("data-place-id");
-
-      if (!placeId) {
-        return;
-      }
-
-      const formData = new FormData(form);
-      profileExtras.notesByPlaceId[placeId] = {
-        visitedOn: String(formData.get("visitedOn") || "").trim(),
-        note: String(formData.get("note") || "").trim()
-      };
-      saveProfileExtras();
-
-      const saveStatus = form.querySelector('[data-role="save-status"]');
-      if (saveStatus) {
-        saveStatus.textContent = "Saved.";
-      }
-    });
-  });
 }
 
 function renderWishlist() {
