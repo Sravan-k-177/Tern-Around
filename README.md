@@ -80,12 +80,9 @@ Required variables:
 
 For real email verification, also set:
 
-- `SMTP_HOST`: SMTP server host (example `smtp.gmail.com`)
-- `SMTP_PORT`: SMTP port (usually `587`)
-- `SMTP_USER`: SMTP account username
-- `SMTP_PASSWORD`: SMTP app password / SMTP password
-- `SMTP_FROM`: Sender email address
-- `SMTP_USE_TLS`: `true` or `false`
+- `BREVO_API_KEY`: Brevo transactional API key
+- `BREVO_SENDER_EMAIL`: Verified sender email in Brevo
+- `BREVO_SENDER_NAME`: Optional sender name shown in inboxes
 
 For SMS phone number verification (optional), also set:
 
@@ -109,6 +106,11 @@ SMTP_USER=your_email@gmail.com
 SMTP_PASSWORD=your_app_password
 SMTP_FROM=your_email@gmail.com
 SMTP_USE_TLS=true
+
+# Email Verification (Brevo)
+BREVO_API_KEY=your-brevo-api-key
+BREVO_SENDER_EMAIL=verified-sender@example.com
+BREVO_SENDER_NAME=Tern-Around
 
 # SMS Verification (optional)
 TWILIO_ACCOUNT_SID=your-twilio-account-sid

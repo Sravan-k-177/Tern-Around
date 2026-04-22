@@ -6,9 +6,9 @@ import json
 import os
 import re
 import secrets
-import smtplib
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,7 @@ from flask import Flask, jsonify, request, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
-    from twilio.rest import Client as TwilioClient
+    from twilio.rest import Client as TwilioClient  # type: ignore[import-not-found]
     TWILIO_AVAILABLE = True
 except ImportError:
     TWILIO_AVAILABLE = False
@@ -421,36 +421,70 @@ def normalize_phone_number(raw_phone: str) -> str:
 
 
 def send_verification_email(recipient: str, username: str, code: str) -> None:
-    smtp_host = os.getenv("SMTP_HOST", "").strip()
-    smtp_port = int(os.getenv("SMTP_PORT", "587").strip())
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
-    smtp_from = os.getenv("SMTP_FROM", smtp_user).strip()
-    smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes"}
+    brevo_api_key = os.getenv("BREVO_API_KEY", "").strip()
+    brevo_sender_email = os.getenv("BREVO_SENDER_EMAIL", "").strip()
+    brevo_sender_name = os.getenv("BREVO_SENDER_NAME", "Tern-Around").strip() or "Tern-Around"
 
-    if not smtp_host or not smtp_from:
-        raise RuntimeError("SMTP is not configured. Set SMTP_HOST and SMTP_FROM.")
+    if not brevo_api_key or not brevo_sender_email:
+        raise RuntimeError("Brevo is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL.")
 
-    message = EmailMessage()
-    message["Subject"] = "Verify your Tern-Around account"
-    message["From"] = smtp_from
-    message["To"] = recipient
-    message.set_content(
-        (
-            f"Hi {username},\n\n"
-            "Welcome to Tern-Around.\n"
-            f"Your verification code is: {code}\n\n"
-            "This code expires in 15 minutes.\n"
-            "If you did not request this, you can ignore this email.\n"
-        )
+    subject = "Verify your Tern-Around account"
+    text_content = (
+        f"Hi {username},\n\n"
+        "Welcome to Tern-Around.\n"
+        f"Your verification code is: {code}\n\n"
+        "This code expires in 15 minutes.\n"
+        "If you did not request this, you can ignore this email.\n"
+    )
+    html_content = f"""
+        <div style="font-family: Arial, Helvetica, sans-serif; color: #17211d; line-height: 1.6;">
+          <h2 style="margin: 0 0 12px; color: #087f5b;">Verify your Tern-Around account</h2>
+          <p style="margin: 0 0 12px;">Hi {username},</p>
+          <p style="margin: 0 0 12px;">Welcome to Tern-Around.</p>
+          <p style="margin: 0 0 12px; font-size: 20px; font-weight: 700; letter-spacing: 2px;">
+            {code}
+          </p>
+          <p style="margin: 0 0 12px;">This code expires in 15 minutes.</p>
+          <p style="margin: 0; color: #5d6c65;">If you did not request this, you can ignore this email.</p>
+        </div>
+    """.strip()
+
+    payload = {
+        "sender": {
+            "name": brevo_sender_name,
+            "email": brevo_sender_email,
+        },
+        "to": [
+            {
+                "email": recipient,
+                "name": username or recipient,
+            }
+        ],
+        "subject": subject,
+        "textContent": text_content,
+        "htmlContent": html_content,
+    }
+
+    request = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "api-key": brevo_api_key,
+            "accept": "application/json",
+            "content-type": "application/json",
+        },
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-        if smtp_use_tls:
-            server.starttls()
-        if smtp_user:
-            server.login(smtp_user, smtp_password)
-        server.send_message(message)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"Brevo returned HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Failed to send email via Brevo: {error_body or exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Failed to reach Brevo: {exc.reason}") from exc
 
 
 def send_verification_sms(phone: str, code: str) -> None:
