@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import smtplib
 from datetime import datetime, timedelta
@@ -15,6 +16,12 @@ import mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
+
+try:
+    from twilio.rest import Client as TwilioClient
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -382,6 +389,37 @@ def generate_verification_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
+def normalize_phone_number(raw_phone: str) -> str:
+    """Normalize user input into E.164 format required by Twilio."""
+    phone = str(raw_phone or "").strip()
+    if not phone:
+        raise ValueError("Phone number is required.")
+
+    # Support international numbers entered as 00<country><number>.
+    if phone.startswith("00"):
+        phone = f"+{phone[2:]}"
+
+    if phone.startswith("+"):
+        digits_only = "".join(filter(str.isdigit, phone))
+        normalized = f"+{digits_only}"
+    else:
+        digits_only = "".join(filter(str.isdigit, phone))
+        if len(digits_only) == 10:
+            default_country_code = os.getenv("PHONE_DEFAULT_COUNTRY_CODE", "+91").strip()
+            if not re.fullmatch(r"\+[1-9]\d{0,3}", default_country_code):
+                raise ValueError("Server is misconfigured: PHONE_DEFAULT_COUNTRY_CODE must look like +91.")
+            normalized = f"{default_country_code}{digits_only}"
+        elif 11 <= len(digits_only) <= 15:
+            normalized = f"+{digits_only}"
+        else:
+            raise ValueError("Phone number must be 10-15 digits.")
+
+    if not re.fullmatch(r"\+[1-9]\d{9,14}", normalized):
+        raise ValueError("Invalid phone format. Use E.164 format like +919876543210.")
+
+    return normalized
+
+
 def send_verification_email(recipient: str, username: str, code: str) -> None:
     smtp_host = os.getenv("SMTP_HOST", "").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587").strip())
@@ -415,6 +453,32 @@ def send_verification_email(recipient: str, username: str, code: str) -> None:
         server.send_message(message)
 
 
+def send_verification_sms(phone: str, code: str) -> None:
+    if not TWILIO_AVAILABLE:
+        raise RuntimeError("Twilio is not installed. Install it with: pip install twilio")
+    
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    from_number = os.getenv("TWILIO_PHONE_NUMBER", "").strip()
+
+    if not account_sid or not auth_token or not from_number:
+        raise RuntimeError("Twilio is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.")
+
+    if not re.fullmatch(r"\+[1-9]\d{9,14}", from_number):
+        raise RuntimeError("TWILIO_PHONE_NUMBER must be in E.164 format, for example +15017122661.")
+
+    try:
+        client = TwilioClient(account_sid, auth_token)
+        message = client.messages.create(
+            body=f"Your Tern-Around phone verification code is: {code}\n\nThis code expires in 15 minutes.",
+            from_=from_number,
+            to=phone
+        )
+        return message.sid
+    except Exception as exc:
+        raise RuntimeError(f"Failed to send SMS: {str(exc)}")
+
+
 def ensure_database_exists() -> None:
     connection = connect_without_database()
     cursor = connection.cursor()
@@ -445,6 +509,12 @@ def initialize_schema() -> None:
             cursor.execute("ALTER TABLE users ADD COLUMN verification_code_hash VARCHAR(64) NULL")
         if not has_column(cursor, "users", "verification_expires_at"):
             cursor.execute("ALTER TABLE users ADD COLUMN verification_expires_at DATETIME NULL")
+        if not has_column(cursor, "users", "phone"):
+            cursor.execute("ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL")
+        if not has_column(cursor, "users", "phone_verification_code_hash"):
+            cursor.execute("ALTER TABLE users ADD COLUMN phone_verification_code_hash VARCHAR(64) NULL")
+        if not has_column(cursor, "users", "phone_verification_expires_at"):
+            cursor.execute("ALTER TABLE users ADD COLUMN phone_verification_expires_at DATETIME NULL")
 
         cursor.execute("SELECT COUNT(*) FROM places")
         (place_count,) = cursor.fetchone() or (0,)
@@ -801,6 +871,115 @@ def api_resend_verification() -> Any:
         send_verification_email(user["email"], user["name"], code)
 
         return jsonify({"ok": True, "message": "Verification code sent."})
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/api/phone/send-code")
+def api_send_phone_code() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone", "")).strip()
+
+    try:
+        normalized_phone = normalize_phone_number(phone)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        code = generate_verification_code()
+        
+        try:
+            send_verification_sms(normalized_phone, code)
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 503
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET phone = %s,
+                phone_verification_code_hash = %s,
+                phone_verification_expires_at = %s
+            WHERE id = %s
+            """,
+            (normalized_phone, hash_verification_code(code), datetime.utcnow() + timedelta(minutes=15), user["id"]),
+        )
+        connection.commit()
+
+        return jsonify({"ok": True, "message": "Verification code sent to your phone."})
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/api/phone/verify-code")
+def api_verify_phone_code() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code", "")).strip()
+
+    if not code:
+        return jsonify({"error": "Verification code is required."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, phone, phone_verification_code_hash, phone_verification_expires_at
+            FROM users
+            WHERE id = %s
+            LIMIT 1
+            """,
+            (user["id"],),
+        )
+        db_user = cursor.fetchone()
+
+        if not db_user:
+            return jsonify({"error": "Account not found."}), 404
+
+        stored_hash = db_user.get("phone_verification_code_hash") or ""
+        expires_at = db_user.get("phone_verification_expires_at")
+
+        if not stored_hash or not expires_at:
+            return jsonify({"error": "No active verification code. Request a new code."}), 400
+
+        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+            return jsonify({"error": "Verification code expired. Request a new code."}), 400
+
+        candidate_hash = hash_verification_code(code)
+        if not hmac.compare_digest(stored_hash, candidate_hash):
+            return jsonify({"error": "Invalid verification code."}), 400
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET phone_verification_code_hash = NULL,
+                phone_verification_expires_at = NULL
+            WHERE id = %s
+            """,
+            (user["id"],),
+        )
+        connection.commit()
+
+        return jsonify({"ok": True, "message": "Phone number verified successfully."})
     finally:
         cursor.close()
         connection.close()

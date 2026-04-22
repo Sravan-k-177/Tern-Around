@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified TINYINT(1) NOT NULL DEFAULT 0,
   verification_code_hash VARCHAR(64) NULL,
   verification_expires_at DATETIME NULL,
+  phone VARCHAR(20) NULL,
+  phone_verification_code_hash VARCHAR(64) NULL,
+  phone_verification_expires_at DATETIME NULL,
   is_select_customer TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

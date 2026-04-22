@@ -17,8 +17,8 @@ const goLoginButton = document.querySelector("#go-login-button");
 const resendCodeButton = document.querySelector("#resend-code-button");
 const verifyBackLoginButton = document.querySelector("#verify-back-login-button");
 const navExploreButton = document.querySelector("#nav-explore-button");
-const navProfileButton = document.querySelector("#nav-profile-button");
 const navWishlistButton = document.querySelector("#nav-wishlist-button");
+const openProfileButton = document.querySelector("#open-profile-button");
 const exploreSection = document.querySelector("#explore-section");
 const profileSection = document.querySelector("#profile-section");
 const wishlistSection = document.querySelector("#wishlist-section");
@@ -27,7 +27,7 @@ const profileBadges = document.querySelector("#profile-badges");
 const wishlistList = document.querySelector("#wishlist-list");
 const userName = document.querySelector("#user-name");
 const passStatus = document.querySelector("#pass-status");
-const logoutButton = document.querySelector("#logout-button");
+const profileLogoutButton = document.querySelector("#profile-logout-button");
 const searchInput = document.querySelector("#search-input");
 const countryFilter = document.querySelector("#country-filter");
 const stateFilter = document.querySelector("#state-filter");
@@ -357,6 +357,13 @@ let userAirport = null;
 let userAirportLookupStarted = false;
 let pendingVerificationEmail = "";
 let wishlistEntries = [];
+let profileExtras = {
+  phone: "",
+  phoneVerified: false,
+  alternateEmail: "",
+  homeCity: "",
+  notesByPlaceId: {}
+};
 const imageCache = new Map();
 const coordinateCache = new Map();
 const destinationAirportCache = new Map();
@@ -379,12 +386,7 @@ function setAppSection(section) {
   wishlistSection.classList.toggle("is-hidden", section !== "wishlist");
 
   navExploreButton.classList.toggle("is-active", section === "explore");
-  navProfileButton.classList.toggle("is-active", section === "profile");
   navWishlistButton.classList.toggle("is-active", section === "wishlist");
-}
-
-function slugify(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 function escapeHtml(value) {
@@ -399,6 +401,69 @@ function escapeHtml(value) {
 
     return entities[character];
   });
+}
+
+function getProfileStorageKey() {
+  if (!currentUser) {
+    return "";
+  }
+
+  const accountKey = currentUser.email || currentUser.username || currentUser.name || "guest";
+  return `tern-around-profile:${accountKey.toLowerCase()}`;
+}
+
+function validatePhoneNumber(phone) {
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, "");
+  // Check if it's a valid international phone format (10-15 digits)
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+function loadProfileExtras() {
+  profileExtras = {
+    phone: "",
+    phoneVerified: false,
+    alternateEmail: "",
+    homeCity: "",
+    notesByPlaceId: {}
+  };
+
+  if (!currentUser) {
+    return;
+  }
+
+  try {
+    const rawValue = localStorage.getItem(getProfileStorageKey());
+
+    if (!rawValue) {
+      return;
+    }
+
+    const parsed = JSON.parse(rawValue);
+    profileExtras = {
+      phone: parsed.phone || "",
+      phoneVerified: parsed.phoneVerified || false,
+      alternateEmail: parsed.alternateEmail || "",
+      homeCity: parsed.homeCity || "",
+      notesByPlaceId: parsed.notesByPlaceId || {}
+    };
+  } catch (error) {
+    profileExtras = {
+      phone: "",
+      phoneVerified: false,
+      alternateEmail: "",
+      homeCity: "",
+      notesByPlaceId: {}
+    };
+  }
+}
+
+function saveProfileExtras() {
+  if (!currentUser) {
+    return;
+  }
+
+  localStorage.setItem(getProfileStorageKey(), JSON.stringify(profileExtras));
 }
 
 function getAllPlaces() {
@@ -441,6 +506,7 @@ async function loadBootstrapData() {
     completedQuestIds = new Set(data.completedQuestIds || []);
     wishlistEntries = data.wishlistEntries || [];
     currentUser = data.user || null;
+    loadProfileExtras();
     loginStatus.textContent = "";
     signupStatus.textContent = "";
     verifyStatus.textContent = "";
@@ -1136,17 +1202,45 @@ function renderUser() {
 function renderProfileDetails() {
   if (!currentUser) {
     profileContactDetails.innerHTML = "<p>Log in to view profile details.</p>";
-    profileBadges.innerHTML = "<p>Your visited badges will appear here.</p>";
+    profileBadges.innerHTML = "<p>Your visited locations will appear here.</p>";
     return;
   }
 
   profileContactDetails.innerHTML = `
-    <dl class="profile-list">
-      <div><dt>Username</dt><dd>${escapeHtml(currentUser.username || currentUser.name || "-")}</dd></div>
-      <div><dt>Email</dt><dd>${escapeHtml(currentUser.email || "-")}</dd></div>
-      <div><dt>Email status</dt><dd>${currentUser.emailVerified ? "Verified" : "Not verified"}</dd></div>
-      <div><dt>Plan</dt><dd>${currentUser.isSelectCustomer ? "Explorer Select" : "Standard traveler"}</dd></div>
-    </dl>
+    <form class="profile-form" id="profile-details-form">
+      <dl class="profile-list">
+        <div><dt>Username</dt><dd>${escapeHtml(currentUser.username || currentUser.name || "-")}</dd></div>
+        <div><dt>Email</dt><dd>${escapeHtml(currentUser.email || "-")}</dd></div>
+        <div><dt>Email status</dt><dd>${currentUser.emailVerified ? "Verified" : "Not verified"}</dd></div>
+        <div><dt>Plan</dt><dd>${currentUser.isSelectCustomer ? "Explorer Select" : "Standard traveler"}</dd></div>
+      </dl>
+
+      <div class="profile-form-grid">
+        <label for="profile-phone-input">Phone</label>
+        <div class="phone-input-group">
+          <input id="profile-phone-input" name="phone" type="tel" placeholder="+91 9876543210" value="${escapeHtml(profileExtras.phone)}">
+          <button type="button" id="send-phone-code-button" class="phone-verify-button">${profileExtras.phoneVerified ? "✓ Verified" : "Send Code"}</button>
+        </div>
+        <small id="phone-code-status" class="phone-verify-status"></small>
+
+        <div id="phone-code-input-container" class="phone-code-input-container" style="display: none;">
+          <label for="profile-phone-code-input">Verification Code</label>
+          <div class="phone-code-input-group">
+            <input id="profile-phone-code-input" name="phoneCode" type="text" placeholder="123456" maxlength="6" inputmode="numeric">
+            <button type="button" id="verify-phone-code-button" class="phone-verify-button">Verify</button>
+          </div>
+        </div>
+
+        <label for="profile-alt-email-input">Alternate email</label>
+        <input id="profile-alt-email-input" name="alternateEmail" type="email" placeholder="backup@example.com" value="${escapeHtml(profileExtras.alternateEmail)}">
+
+        <label for="profile-home-city-input">Home city</label>
+        <input id="profile-home-city-input" name="homeCity" type="text" placeholder="Hyderabad" value="${escapeHtml(profileExtras.homeCity)}">
+      </div>
+
+      <p class="api-status" id="profile-save-status" aria-live="polite"></p>
+      <button class="primary-action" type="submit">Save contact details</button>
+    </form>
   `;
 
   const visitedIds = Array.from(completedQuestIds);
@@ -1156,25 +1250,202 @@ function renderProfileDetails() {
     .filter(Boolean);
 
   if (visitedPlaces.length === 0) {
-    profileBadges.innerHTML = "<p>Complete location quests to unlock badges.</p>";
-    return;
+    profileBadges.innerHTML = "<p>Complete location quests to unlock visited locations and badges.</p>";
+  } else {
+    profileBadges.innerHTML = `
+      <div class="badge-grid">
+        ${visitedPlaces
+          .map((place) => {
+            const visitedEntry = profileExtras.notesByPlaceId?.[place.id] || {};
+
+            return `
+              <article class="badge-card">
+                <span class="section-kicker">Visited location</span>
+                <h3>${escapeHtml(place.name)}</h3>
+                <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
+                <form class="location-note-form" data-place-id="${escapeHtml(place.id)}">
+                  <label for="visited-date-${escapeHtml(place.id)}">Visited on</label>
+                  <input id="visited-date-${escapeHtml(place.id)}" name="visitedOn" type="date" value="${escapeHtml(
+                    visitedEntry.visitedOn || ""
+                  )}">
+
+                  <label for="visited-note-${escapeHtml(place.id)}">Your notes</label>
+                  <textarea id="visited-note-${escapeHtml(place.id)}" name="note" rows="3" placeholder="What did you like there?">${escapeHtml(
+                    visitedEntry.note || ""
+                  )}</textarea>
+
+                  <div class="location-note-actions">
+                    <button class="secondary-action" type="submit">Save location details</button>
+                    <small class="api-status" data-role="save-status"></small>
+                  </div>
+                </form>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
   }
 
-  profileBadges.innerHTML = `
-    <div class="badge-grid">
-      ${visitedPlaces
-        .map(
-          (place) => `
-            <article class="badge-card">
-              <span class="section-kicker">Badge unlocked</span>
-              <h3>${escapeHtml(place.name)}</h3>
-              <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
-            </article>
-          `
-        )
-        .join("")}
-    </div>
-  `;
+  const profileForm = document.querySelector("#profile-details-form");
+  const profileSaveStatus = document.querySelector("#profile-save-status");
+
+  profileForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(profileForm);
+    const newPhone = String(formData.get("phone") || "").trim();
+    
+    // If phone changed, reset verification status
+    if (newPhone !== profileExtras.phone) {
+      profileExtras.phoneVerified = false;
+    }
+    
+    profileExtras.phone = newPhone;
+    profileExtras.alternateEmail = String(formData.get("alternateEmail") || "").trim();
+    profileExtras.homeCity = String(formData.get("homeCity") || "").trim();
+    saveProfileExtras();
+
+    if (profileSaveStatus) {
+      profileSaveStatus.textContent = "Profile details saved on this device.";
+    }
+  });
+
+  const sendPhoneCodeButton = profileForm?.querySelector("#send-phone-code-button");
+  const phoneInput = profileForm?.querySelector("#profile-phone-input");
+  const phoneCodeStatus = profileForm?.querySelector("#phone-code-status");
+  const phoneCodeInputContainer = profileForm?.querySelector("#phone-code-input-container");
+  const phoneCodeInput = profileForm?.querySelector("#profile-phone-code-input");
+  const verifyPhoneCodeButton = profileForm?.querySelector("#verify-phone-code-button");
+
+  sendPhoneCodeButton?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const phone = phoneInput?.value.trim() || "";
+
+    if (!phone) {
+      phoneCodeStatus.textContent = "Please enter a phone number.";
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+      return;
+    }
+
+    // Validate format
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      phoneCodeStatus.textContent = "Phone number must be 10-15 digits.";
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+      return;
+    }
+
+    // Already verified
+    if (profileExtras.phoneVerified) {
+      phoneCodeStatus.textContent = "Phone is already verified.";
+      phoneCodeStatus.classList.remove("error");
+      phoneCodeStatus.classList.add("success");
+      return;
+    }
+
+    // Send verification code
+    sendPhoneCodeButton.disabled = true;
+    phoneCodeStatus.textContent = "Sending verification code...";
+    phoneCodeStatus.classList.remove("error", "success");
+
+    try {
+      const response = await fetchJson("/api/phone/send-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ phone })
+      });
+
+      phoneCodeStatus.textContent = "Code sent! Enter it below.";
+      phoneCodeStatus.classList.remove("error");
+      phoneCodeStatus.classList.add("success");
+      phoneCodeInputContainer.style.display = "block";
+      phoneCodeInput.value = "";
+      phoneCodeInput.focus();
+    } catch (error) {
+      phoneCodeStatus.textContent = error.message;
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+    } finally {
+      sendPhoneCodeButton.disabled = false;
+    }
+  });
+
+  verifyPhoneCodeButton?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const code = phoneCodeInput?.value.trim() || "";
+
+    if (!code) {
+      phoneCodeStatus.textContent = "Please enter the verification code.";
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+      return;
+    }
+
+    if (code.length !== 6 || !/^\d+$/.test(code)) {
+      phoneCodeStatus.textContent = "Verification code must be 6 digits.";
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+      return;
+    }
+
+    verifyPhoneCodeButton.disabled = true;
+    phoneCodeStatus.textContent = "Verifying...";
+    phoneCodeStatus.classList.remove("error", "success");
+
+    try {
+      const response = await fetchJson("/api/phone/verify-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ code })
+      });
+
+      profileExtras.phoneVerified = true;
+      saveProfileExtras();
+      phoneCodeStatus.textContent = "✓ Phone verified successfully!";
+      phoneCodeStatus.classList.remove("error");
+      phoneCodeStatus.classList.add("success");
+      sendPhoneCodeButton.textContent = "✓ Verified";
+      sendPhoneCodeButton.disabled = true;
+      phoneCodeInputContainer.style.display = "none";
+    } catch (error) {
+      phoneCodeStatus.textContent = error.message;
+      phoneCodeStatus.classList.remove("success");
+      phoneCodeStatus.classList.add("error");
+    } finally {
+      verifyPhoneCodeButton.disabled = false;
+    }
+  });
+
+  profileBadges.querySelectorAll(".location-note-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const placeId = form.getAttribute("data-place-id");
+
+      if (!placeId) {
+        return;
+      }
+
+      const formData = new FormData(form);
+      profileExtras.notesByPlaceId[placeId] = {
+        visitedOn: String(formData.get("visitedOn") || "").trim(),
+        note: String(formData.get("note") || "").trim()
+      };
+      saveProfileExtras();
+
+      const saveStatus = form.querySelector('[data-role="save-status"]');
+      if (saveStatus) {
+        saveStatus.textContent = "Saved.";
+      }
+    });
+  });
 }
 
 function renderWishlist() {
@@ -1864,7 +2135,7 @@ verifyBackLoginButton.addEventListener("click", () => {
   showAuthScreen("login");
 });
 
-logoutButton.addEventListener("click", async () => {
+async function handleLogout() {
   try {
     await fetchJson("/api/logout", {
       method: "POST"
@@ -1888,14 +2159,23 @@ logoutButton.addEventListener("click", async () => {
   loginStatus.textContent = "";
   signupStatus.textContent = "";
   verifyStatus.textContent = "";
+  profileExtras = {
+    phone: "",
+    phoneVerified: false,
+    alternateEmail: "",
+    homeCity: "",
+    notesByPlaceId: {}
+  };
   renderApp();
-});
+}
+
+profileLogoutButton?.addEventListener("click", handleLogout);
 
 navExploreButton.addEventListener("click", () => {
   setAppSection("explore");
 });
 
-navProfileButton.addEventListener("click", () => {
+openProfileButton?.addEventListener("click", () => {
   setAppSection("profile");
   renderProfileDetails();
 });

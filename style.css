@@ -60,7 +60,8 @@ body::after {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -729,6 +730,114 @@ p {
   font-weight: 700;
 }
 
+.profile-form {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.profile-form-grid label,
+.location-note-form label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.profile-form-grid input,
+.location-note-form input,
+.location-note-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  padding: 11px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.phone-input-group,
+.phone-code-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.phone-input-group input,
+.phone-code-input-group input {
+  flex: 1;
+  margin: 0;
+}
+
+.phone-code-input-container {
+  margin-top: 12px;
+}
+
+.phone-verify-button {
+  padding: 11px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+.phone-verify-button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.phone-verify-button:disabled {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  cursor: default;
+  opacity: 0.8;
+}
+
+.phone-verify-status {
+  font-size: 0.85rem;
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.phone-verify-status.success {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.phone-verify-status.error {
+  color: var(--coral);
+  font-weight: 600;
+}
+
+.location-note-form {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.location-note-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
 .badge-grid {
   display: grid;
   gap: 10px;
@@ -839,6 +948,6 @@ p {
 
   .app-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
