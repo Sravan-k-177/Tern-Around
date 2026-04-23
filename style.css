@@ -175,7 +175,8 @@ p {
 }
 
 .login-screen .brand-panel {
-  padding-right: 8px;
+  padding-right: 8
+  px;
 }
 
 .login-card label,
@@ -985,6 +986,34 @@ p {
 }
 
 @media (max-width: 640px) {
+  .login-screen::before {
+    inset: 125px -16px 20px;
+  }
+
+  .login-screen {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 12px;
+    padding: 24px 0 12px;
+  }
+
+  .brand-panel {
+    max-width: none;
+    padding: 0;
+  }
+
+  .login-screen h1 {
+    margin-top: 100px;
+    margin-bottom: 12px;
+    font-size: 1.8rem;
+  }
+
+  .login-screen .brand-panel p {
+    margin-bottom: 14px;
+    font-size: 0.95rem;
+  }
+
   .app-shell {
     width: min(100% - 24px, 1240px);
     padding: 18px 0;
@@ -1064,29 +1093,15 @@ p {
 .place-list {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 12px;
   max-height: none;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: visible;
+  overflow-y: visible;
   padding-bottom: 10px;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--line);
 }
 
-.place-list::-webkit-scrollbar {
-  height: 5px;
-}
-.place-list::-webkit-scrollbar-track {
-  background: var(--line);
-  border-radius: 4px;
-}
-.place-list::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 4px;
-}
+
 
 /* ── Each card: fixed width so they don't shrink ── */
 .place-card {
@@ -1169,4 +1184,391 @@ p {
   .place-card img {
     height: 95px;
   }
+}
+
+/* =====================================================
+   Compatibility styles for new profile/avatar features
+   ===================================================== */
+
+/* Top-bar avatar chip */
+.avatar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+  max-width: none;
+}
+
+.avatar-chip:hover {
+  border-color: transparent;
+}
+
+.avatar-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  flex-shrink: 0;
+  border: 2px solid rgba(8, 127, 91, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.avatar-chip-name {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1;
+  display: none;
+}
+
+.avatar-chip-caret {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* Profile page header and actions */
+.profile-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: nowrap;
+}
+
+.profile-header-left {
+  min-width: 0;
+}
+
+.profile-page-title {
+  margin: 8px 0 0;
+  font-size: clamp(1.6rem, 3.8vw, 2.4rem);
+  line-height: 1.1;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  color: var(--accent-dark);
+  font-weight: 700;
+  background: transparent;
+}
+
+.back-button:hover {
+  color: var(--coral);
+}
+
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #f3c6bf;
+  padding: 0 12px;
+  color: #9f2f21;
+  font-weight: 700;
+  background: #fff4f1;
+  margin-left: auto;
+}
+
+.logout-button:hover {
+  border-color: #e58a7c;
+  background: #ffeae6;
+}
+
+/* Avatar picker in profile */
+.avatar-picker-section {
+  margin-bottom: 8px;
+}
+
+.avatar-preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0 8px;
+  margin-bottom: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.avatar-preview-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  border: 3px solid rgba(8, 127, 91, 0.35);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
+}
+
+.avatar-preview-name {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.avatar-picker-label {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.avatar-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.avatar-picker-item {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  box-shadow: 0 2px 7px rgba(23, 33, 29, 0.2);
+}
+
+.avatar-picker-item:hover {
+  transform: translateY(-1px);
+}
+
+.avatar-picker-item.is-selected {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(8, 127, 91, 0.24);
+}
+
+/* Badges strip inside profile */
+.badge-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+
+.badge-chip {
+  flex: 0 0 190px;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(120deg, #eef8f3, #fff8eb);
+}
+
+.badge-chip-emoji {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.badge-chip-emoji img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.badge-chip-info {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.badge-chip-info strong,
+.badge-chip-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge-chip-date {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.badge-strip-all-btn {
+  flex: 0 0 72px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px dashed var(--accent);
+  color: var(--accent-dark);
+  font-weight: 700;
+  background: #edf9f4;
+}
+
+.badge-strip-all-btn:hover {
+  background: #e4f4ed;
+}
+
+/* All badges page */
+#badges-all-grid {
+  width: 100%;
+}
+
+.badges-all-grid-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+/* Logout confirmation modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal-card {
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.modal-icon {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.modal-card h2 {
+  margin: 0 0 8px;
+}
+
+.modal-card p {
+  margin: 0 0 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.modal-cancel-btn,
+.modal-confirm-btn {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.modal-cancel-btn {
+  color: var(--ink);
+  background: #f0f5f2;
+}
+
+.modal-confirm-btn {
+  color: #ffffff;
+  border-color: #ba3e2f;
+  background: #c74a3a;
+}
+
+.modal-confirm-btn:hover {
+  background: #aa3f31;
+}
+
+@media (max-width: 920px) {
+  #main-top-bar.top-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  #main-top-bar > div {
+    min-width: 0;
+  }
+
+  #main-top-bar .avatar-chip {
+    margin-left: auto;
+  }
+
+  .profile-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .avatar-chip {
+    width: 44px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .badge-chip {
+    flex: 0 0 170px;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  #main-top-bar .avatar-chip {
+    max-width: none;
+  }
+
+  .avatar-preview-circle {
+    width: 64px;
+    height: 64px;
+    font-size: 1.7rem;
+  }
+}
+
+#open-profile-button.avatar-chip {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#open-profile-button .avatar-chip-caret {
+  display: none;
 }

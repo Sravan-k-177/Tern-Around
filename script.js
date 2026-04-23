@@ -372,6 +372,58 @@ const coordinateCache = new Map();
 const destinationAirportCache = new Map();
 let backendPlaces = [];
 
+/* ── Avatar system ── */
+const AVATARS = [
+  { id: 1,  bg: "#6366f1", fg: "#fff",    emoji: "🏔️" },
+  { id: 2,  bg: "#ec4899", fg: "#fff",    emoji: "🌸" },
+  { id: 3,  bg: "#f59e0b", fg: "#fff",    emoji: "🌞" },
+  { id: 4,  bg: "#10b981", fg: "#fff",    emoji: "🌿" },
+  { id: 5,  bg: "#3b82f6", fg: "#fff",    emoji: "🌊" },
+  { id: 6,  bg: "#8b5cf6", fg: "#fff",    emoji: "🔭" },
+  { id: 7,  bg: "#ef4444", fg: "#fff",    emoji: "🗺️" },
+  { id: 8,  bg: "#0ea5e9", fg: "#fff",    emoji: "✈️" },
+  { id: 9,  bg: "#d97706", fg: "#fff",    emoji: "🏕️" },
+  { id: 10, bg: "#64748b", fg: "#fff",    emoji: "🧭" }
+];
+let selectedAvatarId = Number(localStorage.getItem("tern-avatar") || "1");
+
+function getAvatar() {
+  return AVATARS.find(a => a.id === selectedAvatarId) || AVATARS[0];
+}
+
+function renderAvatarCircle(el) {
+  if (!el) return;
+  const av = getAvatar();
+  el.style.background = av.bg;
+  el.style.color = av.fg;
+  el.textContent = av.emoji;
+}
+
+function renderTopBarAvatar() {
+  renderAvatarCircle(document.getElementById("top-bar-avatar"));
+}
+
+function renderProfileAvatarPreview() {
+  renderAvatarCircle(document.getElementById("profile-avatar-preview"));
+  const previewName = document.getElementById("profile-avatar-preview-name");
+  if (previewName) {
+    previewName.textContent = currentUser
+      ? (currentUser.username || currentUser.name || "Traveler")
+      : "Traveler";
+  }
+}
+
+function saveAvatar(id) {
+  selectedAvatarId = id;
+  localStorage.setItem("tern-avatar", String(id));
+  renderTopBarAvatar();
+  renderProfileAvatarPreview();
+  // refresh avatar picker if profile is open
+  document.querySelectorAll(".avatar-picker-item").forEach(el => {
+    el.classList.toggle("is-selected", Number(el.dataset.avatarId) === id);
+  });
+}
+
 function showAuthScreen(screen) {
   loginScreen.classList.toggle("is-hidden", screen !== "login");
   signupScreen.classList.toggle("is-hidden", screen !== "signup");
@@ -384,26 +436,57 @@ function getWishlistIds() {
 
 function setAppSection(section) {
   activeAppSection = section;
+  const badgesAllSection = document.getElementById("badges-all-section");
   exploreSection.classList.toggle("is-hidden", section !== "explore");
   profileSection.classList.toggle("is-hidden", section !== "profile");
   wishlistSection.classList.toggle("is-hidden", section !== "wishlist");
+  if (badgesAllSection) badgesAllSection.classList.toggle("is-hidden", section !== "badges-all");
 
   navExploreButton.classList.toggle("is-active", section === "explore");
   navWishlistButton.classList.toggle("is-active", section === "wishlist");
+
+  const mainTopBar = document.getElementById("main-top-bar");
+  const mainAppNav = document.querySelector(".app-view > .app-nav");
+  const hideTopChrome = section === "profile" || section === "badges-all";
+  if (mainTopBar) mainTopBar.classList.toggle("is-hidden", hideTopChrome);
+  if (mainAppNav) mainAppNav.classList.toggle("is-hidden", hideTopChrome);
 }
 
 function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => {
-    const entities = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    };
+  const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+  return String(value).replace(/[&<>"']/g, (c) => entities[c]);
+}
 
-    return entities[character];
+/** Shorthand for JSON POST requests */
+async function postJson(url, body) {
+  return fetchJson(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
   });
+}
+
+/** Default blank profile state — single source of truth */
+const BLANK_PROFILE_EXTRAS = Object.freeze({
+  phone: "",
+  phoneVerified: false,
+  alternateEmail: "",
+  homeCity: "",
+  notesByPlaceId: {}
+});
+
+/** Clear all auth status messages */
+function clearAuthStatus() {
+  loginStatus.textContent = "";
+  signupStatus.textContent = "";
+  verifyStatus.textContent = "";
+}
+
+/** Toggle success/error class on a status element */
+function setStatus(el, message, isSuccess) {
+  el.textContent = message;
+  el.classList.toggle("success", isSuccess);
+  el.classList.toggle("error", !isSuccess);
 }
 
 function getLocalDateInputValue(dateValue) {
@@ -447,13 +530,7 @@ async function getCurrentGeoPosition() {
 }
 
 function markPlaceVisitedWithCapture(place, capturedAt, captureMeta = {}) {
-  return fetchJson("/api/quests/complete", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ placeId: place.id })
-  }).then((data) => {
+  return postJson("/api/quests/complete", { placeId: place.id }).then((data) => {
     completedQuestIds = new Set(data.completedQuestIds || []);
     upsertVisitedEntry(place.id, {
       visitedOn: getLocalDateInputValue(capturedAt),
@@ -535,41 +612,23 @@ function validatePhoneNumber(phone) {
 }
 
 function loadProfileExtras() {
-  profileExtras = {
-    phone: "",
-    phoneVerified: false,
-    alternateEmail: "",
-    homeCity: "",
-    notesByPlaceId: {}
-  };
+  profileExtras = { ...BLANK_PROFILE_EXTRAS, notesByPlaceId: {} };
 
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
 
   try {
     const rawValue = localStorage.getItem(getProfileStorageKey());
-
-    if (!rawValue) {
-      return;
-    }
-
+    if (!rawValue) return;
     const parsed = JSON.parse(rawValue);
     profileExtras = {
-      phone: parsed.phone || "",
-      phoneVerified: parsed.phoneVerified || false,
+      phone:          parsed.phone          || "",
+      phoneVerified:  parsed.phoneVerified  || false,
       alternateEmail: parsed.alternateEmail || "",
-      homeCity: parsed.homeCity || "",
+      homeCity:       parsed.homeCity       || "",
       notesByPlaceId: parsed.notesByPlaceId || {}
     };
-  } catch (error) {
-    profileExtras = {
-      phone: "",
-      phoneVerified: false,
-      alternateEmail: "",
-      homeCity: "",
-      notesByPlaceId: {}
-    };
+  } catch {
+    profileExtras = { ...BLANK_PROFILE_EXTRAS, notesByPlaceId: {} };
   }
 }
 
@@ -1223,14 +1282,7 @@ function renderDetailPanel() {
 
   document.querySelector("#complete-quest").addEventListener("click", async () => {
     try {
-      const data = await fetchJson("/api/quests/complete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ placeId: place.id })
-      });
-
+      const data = await postJson("/api/quests/complete", { placeId: place.id });
       completedQuestIds = new Set(data.completedQuestIds || []);
       renderApp();
     } catch (error) {
@@ -1243,35 +1295,22 @@ function renderDetailPanel() {
       apiStatus.textContent = "Log in to save places to your wishlist.";
       return;
     }
-
     try {
-      if (isInWishlist) {
-        const data = await fetchJson("/api/wishlist", {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ placeId: place.id })
-        });
-        wishlistEntries = data.wishlistEntries || [];
-      } else {
-        const data = await fetchJson("/api/wishlist", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
+      const data = isInWishlist
+        ? await fetchJson("/api/wishlist", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ placeId: place.id })
+          })
+        : await postJson("/api/wishlist", {
             placeId: place.id,
             name: place.name,
             country: place.country,
             state: place.state,
             city: place.city,
             type: place.type
-          })
-        });
-        wishlistEntries = data.wishlistEntries || [];
-      }
-
+          });
+      wishlistEntries = data.wishlistEntries || [];
       renderApp();
     } catch (error) {
       apiStatus.textContent = error.message;
@@ -1430,6 +1469,7 @@ function renderUser() {
   if (!currentUser) {
     userName.textContent = "Guest";
     passStatus.textContent = "Explorer Select";
+    renderTopBarAvatar();
     return;
   }
 
@@ -1437,6 +1477,7 @@ function renderUser() {
   passStatus.textContent = currentUser.isSelectCustomer
     ? "Explorer Select"
     : "Standard traveler";
+  renderTopBarAvatar();
 }
 
 function renderProfileDetails() {
@@ -1446,7 +1487,29 @@ function renderProfileDetails() {
     return;
   }
 
-  profileContactDetails.innerHTML = `
+  const avatarPickerHtml = `
+    <div class="avatar-preview-card">
+      <div class="avatar-preview-circle" id="profile-avatar-preview" aria-hidden="true"></div>
+      <p class="avatar-preview-name" id="profile-avatar-preview-name">Traveler</p>
+    </div>
+    <div class="avatar-picker-section">
+      <p class="avatar-picker-label">Choose your avatar</p>
+      <div class="avatar-picker-grid">
+        ${AVATARS.map(av => `
+          <button
+            type="button"
+            class="avatar-picker-item${av.id === selectedAvatarId ? " is-selected" : ""}"
+            data-avatar-id="${av.id}"
+            style="background:${av.bg};color:${av.fg}"
+            title="Avatar ${av.id}"
+            aria-label="Select avatar ${av.emoji}"
+          >${av.emoji}</button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  profileContactDetails.innerHTML = avatarPickerHtml + `
     <form class="profile-form" id="profile-details-form">
       <dl class="profile-list">
         <div><dt>Username</dt><dd>${escapeHtml(currentUser.username || currentUser.name || "-")}</dd></div>
@@ -1492,40 +1555,50 @@ function renderProfileDetails() {
   if (visitedPlaces.length === 0) {
     profileBadges.innerHTML = "<p>Complete location quests to unlock visited locations and badges.</p>";
   } else {
+    // ── Horizontal scroll strip with "All →" chip at the end
     profileBadges.innerHTML = `
-      <div class="badge-grid">
-        ${visitedPlaces
-          .map((place) => {
-            const visitedEntry = profileExtras.notesByPlaceId?.[place.id] || {};
-            const visitedOnLabel = visitedEntry.visitedOn
-              ? new Date(visitedEntry.visitedOn).toLocaleDateString()
-              : "Capture pending";
-            const captureDistance = Number.isFinite(visitedEntry.captureDistanceMeters)
-              ? `${visitedEntry.captureDistanceMeters}m from target`
-              : visitedEntry.captureMethod === "photo-only"
-                ? "Photo-only capture (GPS unavailable)"
-                : "Manual quest completion";
-
-            return `
-              <article class="badge-card compact-badge${visitedEntry.capturePhotoDataUrl ? " has-photo" : ""}">
-                <div class="badge-copy">
-                  <span class="section-kicker">Visited location</span>
-                  <h3>${escapeHtml(place.name)}</h3>
-                  <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
-                  <small class="badge-meta">Visited: ${escapeHtml(visitedOnLabel)}</small>
-                  <small class="badge-meta">${escapeHtml(captureDistance)}</small>
-                </div>
-                ${visitedEntry.capturePhotoDataUrl ? `<img class="badge-photo" src="${visitedEntry.capturePhotoDataUrl}" alt="Visit capture for ${escapeHtml(place.name)}">` : ""}
-              </article>
-            `;
-          })
-          .join("")}
+      <div class="badge-strip">
+        ${visitedPlaces.map((place) => {
+          const entry = profileExtras.notesByPlaceId?.[place.id] || {};
+          const dateLabel = entry.visitedOn
+            ? new Date(entry.visitedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+            : "Pending";
+          return `
+            <article class="badge-chip">
+              <div class="badge-chip-emoji">${entry.capturePhotoDataUrl
+                ? `<img src="${entry.capturePhotoDataUrl}" alt="">`
+                : "📍"}
+              </div>
+              <div class="badge-chip-info">
+                <strong>${escapeHtml(place.name)}</strong>
+                <small>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</small>
+                <small class="badge-chip-date">${escapeHtml(dateLabel)}</small>
+              </div>
+            </article>
+          `;
+        }).join("")}
+        <button type="button" class="badge-strip-all-btn" id="badges-view-all-btn">
+          <span>All</span>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
       </div>
     `;
+    document.getElementById("badges-view-all-btn")?.addEventListener("click", () => {
+      renderBadgesAll();
+      setAppSection("badges-all");
+    });
   }
 
   const profileForm = document.querySelector("#profile-details-form");
   const profileSaveStatus = document.querySelector("#profile-save-status");
+
+  // Avatar picker
+  renderProfileAvatarPreview();
+  document.querySelectorAll(".avatar-picker-item").forEach(btn => {
+    btn.addEventListener("click", () => {
+      saveAvatar(Number(btn.dataset.avatarId));
+    });
+  });
 
   profileForm?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1558,55 +1631,33 @@ function renderProfileDetails() {
   sendPhoneCodeButton?.addEventListener("click", async (event) => {
     event.preventDefault();
     const phone = phoneInput?.value.trim() || "";
+    const digitsOnly = phone.replace(/\D/g, "");
 
     if (!phone) {
-      phoneCodeStatus.textContent = "Please enter a phone number.";
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, "Please enter a phone number.", false);
       return;
     }
-
-    // Validate format
-    const digitsOnly = phone.replace(/\D/g, "");
     if (digitsOnly.length < 10 || digitsOnly.length > 15) {
-      phoneCodeStatus.textContent = "Phone number must be 10-15 digits.";
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, "Phone number must be 10-15 digits.", false);
       return;
     }
-
-    // Already verified
     if (profileExtras.phoneVerified) {
-      phoneCodeStatus.textContent = "Phone is already verified.";
-      phoneCodeStatus.classList.remove("error");
-      phoneCodeStatus.classList.add("success");
+      setStatus(phoneCodeStatus, "Phone is already verified.", true);
       return;
     }
 
-    // Send verification code
     sendPhoneCodeButton.disabled = true;
     phoneCodeStatus.textContent = "Sending verification code...";
     phoneCodeStatus.classList.remove("error", "success");
 
     try {
-      const response = await fetchJson("/api/phone/send-code", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ phone })
-      });
-
-      phoneCodeStatus.textContent = "Code sent! Enter it below.";
-      phoneCodeStatus.classList.remove("error");
-      phoneCodeStatus.classList.add("success");
+      await postJson("/api/phone/send-code", { phone });
+      setStatus(phoneCodeStatus, "Code sent! Enter it below.", true);
       phoneCodeInputContainer.style.display = "block";
       phoneCodeInput.value = "";
       phoneCodeInput.focus();
     } catch (error) {
-      phoneCodeStatus.textContent = error.message;
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, error.message, false);
     } finally {
       sendPhoneCodeButton.disabled = false;
     }
@@ -1617,16 +1668,11 @@ function renderProfileDetails() {
     const code = phoneCodeInput?.value.trim() || "";
 
     if (!code) {
-      phoneCodeStatus.textContent = "Please enter the verification code.";
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, "Please enter the verification code.", false);
       return;
     }
-
     if (code.length !== 6 || !/^\d+$/.test(code)) {
-      phoneCodeStatus.textContent = "Verification code must be 6 digits.";
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, "Verification code must be 6 digits.", false);
       return;
     }
 
@@ -1635,31 +1681,65 @@ function renderProfileDetails() {
     phoneCodeStatus.classList.remove("error", "success");
 
     try {
-      const response = await fetchJson("/api/phone/verify-code", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ code })
-      });
-
+      await postJson("/api/phone/verify-code", { code });
       profileExtras.phoneVerified = true;
       saveProfileExtras();
-      phoneCodeStatus.textContent = "✓ Phone verified successfully!";
-      phoneCodeStatus.classList.remove("error");
-      phoneCodeStatus.classList.add("success");
+      setStatus(phoneCodeStatus, "✓ Phone verified successfully!", true);
       sendPhoneCodeButton.textContent = "✓ Verified";
       sendPhoneCodeButton.disabled = true;
       phoneCodeInputContainer.style.display = "none";
     } catch (error) {
-      phoneCodeStatus.textContent = error.message;
-      phoneCodeStatus.classList.remove("success");
-      phoneCodeStatus.classList.add("error");
+      setStatus(phoneCodeStatus, error.message, false);
     } finally {
       verifyPhoneCodeButton.disabled = false;
     }
   });
 
+}
+
+function renderBadgesAll() {
+  const grid = document.getElementById("badges-all-grid");
+  if (!grid) return;
+
+  const visitedIds = Array.from(completedQuestIds);
+  const visitedPlaces = visitedIds
+    .map((id) => getAllPlaces().find((p) => p.id === id))
+    .filter(Boolean);
+
+  if (visitedPlaces.length === 0) {
+    grid.innerHTML = "<p style='padding:20px;color:var(--muted)'>No visited locations yet. Complete quests to earn badges.</p>";
+    return;
+  }
+
+  grid.innerHTML = `
+    <div class="badges-all-grid-inner">
+      ${visitedPlaces.map((place) => {
+        const entry = profileExtras.notesByPlaceId?.[place.id] || {};
+        const dateLabel = entry.visitedOn
+          ? new Date(entry.visitedOn).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
+          : "Capture pending";
+        const distLabel = Number.isFinite(entry.captureDistanceMeters)
+          ? `${entry.captureDistanceMeters}m from target`
+          : entry.captureMethod === "photo-only"
+            ? "Photo-only capture"
+            : "Manual completion";
+        return `
+          <article class="badge-card compact-badge${entry.capturePhotoDataUrl ? " has-photo" : ""}">
+            <div class="badge-copy">
+              <span class="section-kicker">Visited location</span>
+              <h3>${escapeHtml(place.name)}</h3>
+              <p>${escapeHtml(place.city)}, ${escapeHtml(place.country)}</p>
+              <small class="badge-meta">Visited: ${escapeHtml(dateLabel)}</small>
+              <small class="badge-meta">${escapeHtml(distLabel)}</small>
+            </div>
+            ${entry.capturePhotoDataUrl
+              ? `<img class="badge-photo" src="${entry.capturePhotoDataUrl}" alt="Visit photo for ${escapeHtml(place.name)}">`
+              : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderWishlist() {
@@ -1706,12 +1786,9 @@ function renderWishlist() {
       try {
         const data = await fetchJson("/api/wishlist", {
           method: "DELETE",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ placeId })
         });
-
         wishlistEntries = data.wishlistEntries || [];
         renderApp();
       } catch (error) {
@@ -1838,11 +1915,7 @@ function getApiPlaceName(result) {
 }
 
 function getApiPlaceType(result) {
-  if (result.type) {
-    return result.type.replace(/_/g, " ");
-  }
-
-  return result.class || "Location";
+  return slugToLabel(result.type || result.class || "Location");
 }
 
 function getResultCoordinates(result) {
@@ -1899,20 +1972,10 @@ function getAttractionCoords(element) {
   return { lat, lon };
 }
 
+function slugToLabel(s) { return s.replace(/_/g, " "); }
+
 function getAttractionType(tags) {
-  if (tags.tourism) {
-    return tags.tourism.replace(/_/g, " ");
-  }
-
-  if (tags.historic) {
-    return tags.historic.replace(/_/g, " ");
-  }
-
-  if (tags.amenity) {
-    return tags.amenity.replace(/_/g, " ");
-  }
-
-  return "Attraction";
+  return slugToLabel(tags.tourism || tags.historic || tags.amenity || "Attraction");
 }
 
 function getAttractionSummary(name, type, context) {
@@ -2221,21 +2284,12 @@ function renderApp() {
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
   loginStatus.textContent = "Signing in...";
-
   try {
-    await fetchJson("/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        login: loginIdentifierInput.value.trim(),
-        password: loginPasswordInput.value
-      })
+    await postJson("/api/login", {
+      login: loginIdentifierInput.value.trim(),
+      password: loginPasswordInput.value
     });
-
     loginStatus.textContent = "";
     await loadBootstrapData();
   } catch (error) {
@@ -2247,29 +2301,19 @@ loginForm.addEventListener("submit", async (event) => {
       showAuthScreen("verify");
       return;
     }
-
     loginStatus.textContent = error.message;
   }
 });
 
 signupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
   signupStatus.textContent = "Creating account...";
-
   try {
-    const data = await fetchJson("/api/signup", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        username: signupUsernameInput.value.trim(),
-        email: signupEmailInput.value.trim(),
-        password: signupPasswordInput.value
-      })
+    const data = await postJson("/api/signup", {
+      username: signupUsernameInput.value.trim(),
+      email: signupEmailInput.value.trim(),
+      password: signupPasswordInput.value
     });
-
     pendingVerificationEmail = data.email || signupEmailInput.value.trim().toLowerCase();
     verifyEmailInput.value = pendingVerificationEmail;
     verifyCodeInput.value = "";
@@ -2283,21 +2327,12 @@ signupForm.addEventListener("submit", async (event) => {
 
 verifyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
   verifyStatus.textContent = "Verifying...";
-
   try {
-    await fetchJson("/api/verify-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        email: verifyEmailInput.value.trim(),
-        code: verifyCodeInput.value.trim()
-      })
+    await postJson("/api/verify-email", {
+      email: verifyEmailInput.value.trim(),
+      code: verifyCodeInput.value.trim()
     });
-
     verifyStatus.textContent = "";
     await loadBootstrapData();
   } catch (error) {
@@ -2307,42 +2342,21 @@ verifyForm.addEventListener("submit", async (event) => {
 
 resendCodeButton.addEventListener("click", async () => {
   const email = verifyEmailInput.value.trim() || pendingVerificationEmail;
-
   if (!email) {
     verifyStatus.textContent = "Enter your email to resend the verification code.";
     return;
   }
-
   verifyStatus.textContent = "Sending a new code...";
-
   try {
-    const data = await fetchJson("/api/resend-verification", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email })
-    });
-
+    const data = await postJson("/api/resend-verification", { email });
     verifyStatus.textContent = data.message || "Verification code sent.";
   } catch (error) {
     verifyStatus.textContent = error.message;
   }
 });
 
-goSignupButton.addEventListener("click", () => {
-  loginStatus.textContent = "";
-  signupStatus.textContent = "";
-  verifyStatus.textContent = "";
-  showAuthScreen("signup");
-});
-
-goLoginButton.addEventListener("click", () => {
-  loginStatus.textContent = "";
-  signupStatus.textContent = "";
-  verifyStatus.textContent = "";
-  showAuthScreen("login");
-});
+goSignupButton.addEventListener("click", () => { clearAuthStatus(); showAuthScreen("signup"); });
+goLoginButton.addEventListener("click",  () => { clearAuthStatus(); showAuthScreen("login");  });
 
 verifyBackLoginButton.addEventListener("click", () => {
   verifyStatus.textContent = "";
@@ -2373,17 +2387,32 @@ async function handleLogout() {
   loginStatus.textContent = "";
   signupStatus.textContent = "";
   verifyStatus.textContent = "";
-  profileExtras = {
-    phone: "",
-    phoneVerified: false,
-    alternateEmail: "",
-    homeCity: "",
-    notesByPlaceId: {}
-  };
+  profileExtras = { ...BLANK_PROFILE_EXTRAS, notesByPlaceId: {} };
   renderApp();
 }
 
-profileLogoutButton?.addEventListener("click", handleLogout);
+const logoutModal = document.getElementById("logout-modal");
+
+function showLogoutModal() {
+  logoutModal?.classList.remove("is-hidden");
+}
+function hideLogoutModal() {
+  logoutModal?.classList.add("is-hidden");
+}
+
+profileLogoutButton?.addEventListener("click", showLogoutModal);
+
+document.getElementById("logout-cancel-btn")?.addEventListener("click", hideLogoutModal);
+
+// Close on backdrop click
+logoutModal?.addEventListener("click", (e) => {
+  if (e.target === logoutModal) hideLogoutModal();
+});
+
+document.getElementById("logout-confirm-btn")?.addEventListener("click", () => {
+  hideLogoutModal();
+  handleLogout();
+});
 
 navExploreButton.addEventListener("click", () => {
   setAppSection("explore");
@@ -2392,6 +2421,10 @@ navExploreButton.addEventListener("click", () => {
 openProfileButton?.addEventListener("click", () => {
   setAppSection("profile");
   renderProfileDetails();
+});
+
+document.querySelector("#close-profile-button")?.addEventListener("click", () => {
+  setAppSection("explore");
 });
 
 navWishlistButton.addEventListener("click", () => {
@@ -2408,6 +2441,11 @@ countryFilter.addEventListener("change", () => {
 });
 stateFilter.addEventListener("change", renderApp);
 typeFilter.addEventListener("change", renderApp);
+
+document.getElementById("badges-back-button")?.addEventListener("click", () => {
+  setAppSection("profile");
+  renderProfileDetails();
+});
 
 renderApp();
 loadBootstrapData();

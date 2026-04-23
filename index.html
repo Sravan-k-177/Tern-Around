@@ -1,11 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#6366f1">
   <title>Tern-Around</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <main class="app-shell">
     <section class="login-screen" id="login-screen" aria-labelledby="login-title">
@@ -20,7 +29,8 @@
 
       <form class="login-card" id="login-form">
         <label for="login-identifier-input">Username or Email</label>
-        <input id="login-identifier-input" name="loginIdentifier" type="text" placeholder="username or you@example.com" required>
+        <input id="login-identifier-input" name="loginIdentifier" type="text" placeholder="username or you@example.com"
+          required>
 
         <label for="login-password-input">Password</label>
         <input id="login-password-input" name="password" type="password" placeholder="Enter password" required>
@@ -85,17 +95,25 @@
     </section>
 
     <section class="app-view is-hidden" id="app-view" aria-label="Tern-Around travel app">
-      <header class="top-bar">
+      <header class="top-bar" id="main-top-bar">
         <div>
           <p class="eyebrow">Tern-Around</p>
           <h1>Where to next?</h1>
         </div>
-        <div class="user-card">
-          <span id="user-name">Guest</span>
-          <strong id="pass-status">Explorer Select</strong>
-          <button type="button" id="open-profile-button">Profile</button>
-        </div>
+        <button type="button" class="avatar-chip" id="open-profile-button" aria-label="Open profile">
+          <div class="avatar-circle" id="top-bar-avatar">
+            <!-- avatar filled by JS -->
+          </div>
+          <span class="avatar-chip-name" id="user-name">Guest</span>
+          <svg class="avatar-chip-caret" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+            viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </header>
+
+      <!-- hidden element kept for script compat -->
+      <span id="pass-status" class="is-hidden">Explorer Select</span>
 
       <nav class="app-nav" aria-label="App sections">
         <button type="button" class="app-nav-button is-active" id="nav-explore-button">Explore</button>
@@ -177,6 +195,24 @@
       </section>
 
       <section class="is-hidden" id="profile-section" aria-label="Profile section">
+        <header class="profile-page-header">
+          <div class="profile-header-left">
+            <button type="button" class="back-button" id="close-profile-button">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+              </svg>
+              Back to Explore
+            </button>
+            <h1 class="profile-page-title">Your Profile</h1>
+          </div>
+          <button type="button" class="logout-button" id="profile-logout-button">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Log out
+          </button>
+        </header>
         <div class="content-grid profile-grid">
           <article class="detail-panel profile-card">
             <div class="detail-content">
@@ -202,9 +238,19 @@
             </div>
           </article>
         </div>
-        <div class="profile-footer-actions">
-          <button type="button" class="primary-action" id="profile-logout-button">Log out</button>
-        </div>
+      </section>
+
+      <section class="is-hidden" id="badges-all-section" aria-label="All visited locations">
+        <header class="profile-page-header">
+          <div class="profile-header-left">
+            <button type="button" class="back-button" id="badges-back-button">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+              Back to Profile
+            </button>
+            <h1 class="profile-page-title">Visited Locations</h1>
+          </div>
+        </header>
+        <div id="badges-all-grid"></div>
       </section>
 
       <section class="is-hidden" id="wishlist-section" aria-label="Wishlist section">
@@ -223,6 +269,21 @@
     </section>
   </main>
 
+  <!-- Logout confirmation modal -->
+  <div class="modal-backdrop is-hidden" id="logout-modal" role="dialog" aria-modal="true"
+    aria-labelledby="logout-modal-title">
+    <div class="modal-card">
+      <div class="modal-icon">👋</div>
+      <h2 id="logout-modal-title">Log out?</h2>
+      <p>You'll need to sign back in to access your saved trips and profile.</p>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel-btn" id="logout-cancel-btn">Cancel</button>
+        <button type="button" class="modal-confirm-btn" id="logout-confirm-btn">Yes, log out</button>
+      </div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
+
 </html>
