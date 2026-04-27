@@ -28,6 +28,34 @@ load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
+# Security configuration
+is_production = os.getenv("ENVIRONMENT", "development") == "production"
+app.config.update(
+    SESSION_COOKIE_SECURE=is_production,  # Only send over HTTPS in production
+    SESSION_COOKIE_HTTPONLY=True,         # Prevent JS access to session cookie
+    SESSION_COOKIE_SAMESITE="Lax",        # CSRF protection
+)
+
+
+@app.before_request
+def add_security_headers():
+    """Add security headers to all responses"""
+    @app.after_request
+    def set_security_headers(response):
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        # Enable XSS protection
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # HTTPS enforcement
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Referrer policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # CSP header for XSS prevention
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.brevo.com"
+        return response
+
 
 MYSQL_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
@@ -1350,4 +1378,5 @@ def build_catalog(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug_mode = os.getenv("ENVIRONMENT") != "production"
+    app.run(debug=debug_mode)
