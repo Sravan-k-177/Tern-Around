@@ -940,111 +940,14 @@ def api_resend_verification() -> Any:
 
 @app.post("/api/phone/send-code")
 def api_send_phone_code() -> Any:
-    if not DATABASE_READY:
-        return jsonify({"error": "MySQL is not ready."}), 503
-
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "Login required."}), 401
-
-    data = request.get_json(silent=True) or {}
-    phone = str(data.get("phone", "")).strip()
-
-    try:
-        normalized_phone = normalize_phone_number(phone)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    connection = connect_database()
-    cursor = connection.cursor(dictionary=True)
-
-    try:
-        code = generate_verification_code()
-        
-        try:
-            send_verification_sms(normalized_phone, code)
-        except RuntimeError as exc:
-            return jsonify({"error": str(exc)}), 503
-
-        cursor.execute(
-            """
-            UPDATE users
-            SET phone = %s,
-                phone_verification_code_hash = %s,
-                phone_verification_expires_at = %s
-            WHERE id = %s
-            """,
-            (normalized_phone, hash_verification_code(code), datetime.utcnow() + timedelta(minutes=15), user["id"]),
-        )
-        connection.commit()
-
-        return jsonify({"ok": True, "message": "Verification code sent to your phone."})
-    finally:
-        cursor.close()
-        connection.close()
+    # Phone verification temporarily disabled
+    return jsonify({"error": "Phone verification is currently disabled. Coming soon!"}), 503
 
 
 @app.post("/api/phone/verify-code")
 def api_verify_phone_code() -> Any:
-    if not DATABASE_READY:
-        return jsonify({"error": "MySQL is not ready."}), 503
-
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "Login required."}), 401
-
-    data = request.get_json(silent=True) or {}
-    code = str(data.get("code", "")).strip()
-
-    if not code:
-        return jsonify({"error": "Verification code is required."}), 400
-
-    connection = connect_database()
-    cursor = connection.cursor(dictionary=True)
-
-    try:
-        cursor.execute(
-            """
-            SELECT id, phone, phone_verification_code_hash, phone_verification_expires_at
-            FROM users
-            WHERE id = %s
-            LIMIT 1
-            """,
-            (user["id"],),
-        )
-        db_user = cursor.fetchone()
-
-        if not db_user:
-            return jsonify({"error": "Account not found."}), 404
-
-        stored_hash = db_user.get("phone_verification_code_hash") or ""
-        expires_at = db_user.get("phone_verification_expires_at")
-
-        if not stored_hash or not expires_at:
-            return jsonify({"error": "No active verification code. Request a new code."}), 400
-
-        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
-            return jsonify({"error": "Verification code expired. Request a new code."}), 400
-
-        candidate_hash = hash_verification_code(code)
-        if not hmac.compare_digest(stored_hash, candidate_hash):
-            return jsonify({"error": "Invalid verification code."}), 400
-
-        cursor.execute(
-            """
-            UPDATE users
-            SET phone_verification_code_hash = NULL,
-                phone_verification_expires_at = NULL
-            WHERE id = %s
-            """,
-            (user["id"],),
-        )
-        connection.commit()
-
-        return jsonify({"ok": True, "message": "Phone number verified successfully."})
-    finally:
-        cursor.close()
-        connection.close()
+    # Phone verification temporarily disabled
+    return jsonify({"error": "Phone verification is currently disabled. Coming soon!"}), 503
 
 
 @app.post("/api/quests/complete")

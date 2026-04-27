@@ -1519,20 +1519,8 @@ function renderProfileDetails() {
       </dl>
 
       <div class="profile-form-grid">
-        <label for="profile-phone-input">Phone</label>
-        <div class="phone-input-group">
-          <input id="profile-phone-input" name="phone" type="tel" placeholder="+91 9876543210" value="${escapeHtml(profileExtras.phone)}">
-          <button type="button" id="send-phone-code-button" class="phone-verify-button">${profileExtras.phoneVerified ? "✓ Verified" : "Send Code"}</button>
-        </div>
-        <small id="phone-code-status" class="phone-verify-status"></small>
-
-        <div id="phone-code-input-container" class="phone-code-input-container" style="display: none;">
-          <label for="profile-phone-code-input">Verification Code</label>
-          <div class="phone-code-input-group">
-            <input id="profile-phone-code-input" name="phoneCode" type="text" placeholder="123456" maxlength="6" inputmode="numeric">
-            <button type="button" id="verify-phone-code-button" class="phone-verify-button">Verify</button>
-          </div>
-        </div>
+        <label>Phone Verification</label>
+        <small style="color: #999; padding: 8px 0;">Phone verification is coming soon!</small>
 
         <label for="profile-alt-email-input">Alternate email</label>
         <input id="profile-alt-email-input" name="alternateEmail" type="email" placeholder="backup@example.com" value="${escapeHtml(profileExtras.alternateEmail)}">
@@ -1621,6 +1609,8 @@ function renderProfileDetails() {
     }
   });
 
+  // Phone verification temporarily disabled
+  /*
   const sendPhoneCodeButton = profileForm?.querySelector("#send-phone-code-button");
   const phoneInput = profileForm?.querySelector("#profile-phone-input");
   const phoneCodeStatus = profileForm?.querySelector("#phone-code-status");
@@ -1694,6 +1684,7 @@ function renderProfileDetails() {
       verifyPhoneCodeButton.disabled = false;
     }
   });
+  */
 
 }
 
