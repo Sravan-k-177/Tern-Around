@@ -37,24 +37,25 @@ app.config.update(
 )
 
 
-@app.before_request
-def add_security_headers():
-    """Add security headers to all responses"""
-    @app.after_request
-    def set_security_headers(response):
-        # Prevent MIME type sniffing
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        # Prevent clickjacking
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        # Enable XSS protection
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        # HTTPS enforcement
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        # Referrer policy
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # CSP header for XSS prevention
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.brevo.com"
-        return response
+# Define security headers handler and register it explicitly.
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+        "connect-src 'self' https://api.brevo.com https://en.wikipedia.org "
+        "https://countriesnow.space https://raw.githubusercontent.com https://overpass-api.de"
+    )
+    return response
+
+# Register the after-request handler directly on the internal registry.
+# This avoids Flask raising an AssertionError if the app has already
+# handled its first request (which can happen during certain reloads).
+app.after_request_funcs.setdefault(None, []).append(set_security_headers)
 
 
 MYSQL_CONFIG = {
