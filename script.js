@@ -10,6 +10,7 @@ const loginPasswordInput = document.querySelector("#login-password-input");
 const signupUsernameInput = document.querySelector("#signup-username-input");
 const signupEmailInput = document.querySelector("#signup-email-input");
 const signupPasswordInput = document.querySelector("#signup-password-input");
+const signupConfirmPasswordInput = document.querySelector("#signup-confirm-password-input");
 const verifyEmailInput = document.querySelector("#verify-email-input");
 const verifyCodeInput = document.querySelector("#verify-code-input");
 const goSignupButton = document.querySelector("#go-signup-button");
@@ -24,6 +25,7 @@ const profileSection = document.querySelector("#profile-section");
 const wishlistSection = document.querySelector("#wishlist-section");
 const profileContactDetails = document.querySelector("#profile-contact-details");
 const profileBadges = document.querySelector("#profile-badges");
+const profileWishlistBadges = document.querySelector("#profile-wishlist-badges");
 const wishlistList = document.querySelector("#wishlist-list");
 const userName = document.querySelector("#user-name");
 const passStatus = document.querySelector("#pass-status");
@@ -425,9 +427,9 @@ function saveAvatar(id) {
 }
 
 function showAuthScreen(screen) {
-  loginScreen.classList.toggle("is-hidden", screen !== "login");
-  signupScreen.classList.toggle("is-hidden", screen !== "signup");
-  verifyScreen.classList.toggle("is-hidden", screen !== "verify");
+  loginScreen?.classList.toggle("is-hidden", screen !== "login");
+  signupScreen?.classList.toggle("is-hidden", screen !== "signup");
+  verifyScreen?.classList.toggle("is-hidden", screen !== "verify");
 }
 
 function getWishlistIds() {
@@ -437,19 +439,19 @@ function getWishlistIds() {
 function setAppSection(section) {
   activeAppSection = section;
   const badgesAllSection = document.getElementById("badges-all-section");
-  exploreSection.classList.toggle("is-hidden", section !== "explore");
-  profileSection.classList.toggle("is-hidden", section !== "profile");
-  wishlistSection.classList.toggle("is-hidden", section !== "wishlist");
-  if (badgesAllSection) badgesAllSection.classList.toggle("is-hidden", section !== "badges-all");
+  exploreSection?.classList.toggle("is-hidden", section !== "explore");
+  profileSection?.classList.toggle("is-hidden", section !== "profile");
+  wishlistSection?.classList.toggle("is-hidden", section !== "wishlist");
+  badgesAllSection?.classList.toggle("is-hidden", section !== "badges-all");
 
-  navExploreButton.classList.toggle("is-active", section === "explore");
-  navWishlistButton.classList.toggle("is-active", section === "wishlist");
+  navExploreButton?.classList.toggle("is-active", section === "explore");
+  navWishlistButton?.classList.toggle("is-active", section === "wishlist");
 
   const mainTopBar = document.getElementById("main-top-bar");
   const mainAppNav = document.querySelector(".app-view > .app-nav");
   const hideTopChrome = section === "profile" || section === "badges-all";
-  if (mainTopBar) mainTopBar.classList.toggle("is-hidden", hideTopChrome);
-  if (mainAppNav) mainAppNav.classList.toggle("is-hidden", hideTopChrome);
+  mainTopBar?.classList.toggle("is-hidden", hideTopChrome);
+  mainAppNav?.classList.toggle("is-hidden", hideTopChrome);
 }
 
 function escapeHtml(value) {
@@ -489,10 +491,38 @@ function setStatus(el, message, isSuccess) {
   el.classList.toggle("error", !isSuccess);
 }
 
+function getPasswordPolicyError(password) {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters long.";
+  }
+  if (!/[a-z]/.test(password)) {
+    return "Password must include at least one lowercase letter.";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "Password must include at least one uppercase letter.";
+  }
+  if (!/\d/.test(password)) {
+    return "Password must include at least one number.";
+  }
+  if (!/[^\w\s]/.test(password)) {
+    return "Password must include at least one special character.";
+  }
+  return "";
+}
+
 function getLocalDateInputValue(dateValue) {
   const date = new Date(dateValue);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
   return date.toISOString().slice(0, 10);
+}
+
+async function interpretSearchIntent(query) {
+  return postJson("/api/search-intent", {
+    query,
+    country: countryFilter.value,
+    state: stateFilter.value,
+    type: typeFilter.value
+  });
 }
 
 function requestGeoPosition(options) {
@@ -914,19 +944,20 @@ async function getPlaceCoordinates(place) {
     return coordinateCache.get(place.id);
   }
 
-  const params = new URLSearchParams({
-    q: getPlaceCoordinateQuery(place),
-    format: "jsonv2",
-    limit: "1",
-    "accept-language": "en"
+  const data = await fetchJson("/api/geocode-place", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query: getPlaceCoordinateQuery(place) })
   });
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
 
-  if (!response.ok) {
+  const result = data.result;
+
+  if (!result) {
     throw new Error("Location geocoding failed");
   }
 
-  const [result] = await response.json();
   const coords = result ? { lat: Number(result.lat), lon: Number(result.lon) } : null;
   coordinateCache.set(place.id, coords);
   return coords;
@@ -1167,6 +1198,9 @@ function renderPlaceList() {
   }
 
   filteredPlaces.forEach((place) => {
+    const isGeneratedPlace = Boolean(
+      place.generated || (typeof place.source === "string" && place.source.toLowerCase().includes("generated"))
+    );
     const button = document.createElement("button");
     button.type = "button";
     button.className = `place-card${place.id === selectedPlaceId ? " is-active" : ""}`;
@@ -1181,7 +1215,7 @@ function renderPlaceList() {
       <span>
         <strong>${place.name}</strong>
         <small>${place.city}, ${place.state}</small>
-        <em>${place.type}${place.source ? " / API" : ""}</em>
+        <em>${place.type}${isGeneratedPlace ? " / AI" : place.source ? " / API" : ""}</em>
       </span>
     `;
 
@@ -1574,6 +1608,48 @@ function renderProfileDetails() {
     document.getElementById("badges-view-all-btn")?.addEventListener("click", () => {
       renderBadgesAll();
       setAppSection("badges-all");
+    });
+  }
+
+  // Render wishlist badges in profile
+  if (!profileWishlistBadges) {
+    // element not present (older layouts) — skip
+  } else if (!currentUser) {
+    profileWishlistBadges.innerHTML = "<p>Log in to see wishlist badges.</p>";
+  } else if (wishlistEntries.length === 0) {
+    profileWishlistBadges.innerHTML = "<p>No wishlist items yet. Add places to your wishlist to see them here.</p>";
+  } else {
+    profileWishlistBadges.innerHTML = `
+      <div class="badge-strip">
+        ${wishlistEntries.map((entry) => `
+          <article class="badge-chip wishlist-badge-chip" data-place-id="${escapeHtml(entry.placeId)}">
+            <div class="badge-chip-emoji">📌</div>
+            <div class="badge-chip-info">
+              <strong>${escapeHtml(entry.name)}</strong>
+              <small>${escapeHtml(entry.city)}, ${escapeHtml(entry.country)}</small>
+            </div>
+          </article>
+        `).join("")}
+        <button type="button" class="badge-strip-all-btn" id="wishlist-view-all-btn">
+          <span>All</span>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    `;
+
+    document.getElementById("wishlist-view-all-btn")?.addEventListener("click", () => {
+      setAppSection("wishlist");
+    });
+
+    // Clicking a wishlist badge opens the place in explore
+    profileWishlistBadges.querySelectorAll(".wishlist-badge-chip").forEach((el) => {
+      el.addEventListener("click", () => {
+        const placeId = el.getAttribute("data-place-id");
+        if (!placeId) return;
+        selectedPlaceId = placeId;
+        setAppSection("explore");
+        renderApp();
+      });
     });
   }
 
@@ -2190,10 +2266,9 @@ function normalizeApiPlace(result) {
 
 async function searchLiveLocations() {
   const query = searchInput.value.trim();
-  const scopedQuery = [query, stateFilter.value, countryFilter.value].filter(Boolean).join(", ");
 
   if (query.length < 3) {
-    apiStatus.textContent = "Type at least 3 characters before live search.";
+    apiStatus.textContent = "Type at least 3 characters before searching.";
     return;
   }
 
@@ -2201,61 +2276,44 @@ async function searchLiveLocations() {
   const waitMs = Math.max(0, 1100 - (now - lastApiRequestAt));
 
   apiSearchButton.disabled = true;
-  apiStatus.textContent = waitMs > 0 ? "Waiting for API rate limit..." : "Searching live locations...";
+  apiStatus.textContent = waitMs > 0 ? "Waiting before matching your place..." : "Matching your description...";
 
   window.setTimeout(async () => {
     try {
-      const params = new URLSearchParams({
-        q: scopedQuery,
-        format: "jsonv2",
-        addressdetails: "1",
-        limit: "6",
-        "accept-language": "en"
-      });
-
       lastApiRequestAt = Date.now();
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      let searchIntent = null;
 
-      if (!response.ok) {
-        throw new Error("Location API request failed");
+      try {
+        searchIntent = await interpretSearchIntent(query);
+      } catch (error) {
+        searchIntent = null;
       }
 
-      const results = await response.json();
-      const locationPlaces = results.map(normalizeApiPlace);
-      let attractionPlaces = [];
+      const matchedPlace = searchIntent?.generatedPlace || searchIntent?.matchedPlace || null;
+      const searchSource = searchIntent?.source || "heuristic";
+      const reason = searchIntent?.reason ? ` ${searchIntent.reason}` : "";
+      const isGeneratedPlace = Boolean(searchIntent?.generatedPlace);
 
-      if (results[0]) {
-        try {
-          attractionPlaces = await fetchAttractionsForResult(results[0]);
-        } catch (error) {
-          attractionPlaces = [];
-        }
+      if (matchedPlace?.id) {
+        const catalogPlaces = backendPlaces.length > 0 ? backendPlaces : places;
+        const existingPlace = catalogPlaces.find((place) => place.id === matchedPlace.id);
+
+        apiPlaces = existingPlace ? [] : [matchedPlace];
+        selectedPlaceId = matchedPlace.id;
+        searchInput.value = matchedPlace.name || query;
+        apiStatus.textContent = isGeneratedPlace
+          ? `Created a new card for "${query}" as "${matchedPlace.name}".${reason} Saving it to your catalog.`
+          : `${searchSource === "ai" ? "AI" : "Search"} matched "${query}" to "${matchedPlace.name}".${reason} Showing the place card.`;
+        renderApp();
+        return;
       }
 
-      apiPlaces = [
-        ...locationPlaces.slice(0, 1),
-        ...attractionPlaces,
-        ...locationPlaces.slice(1)
-      ];
-
-      if (apiPlaces.length > 0) {
-        selectedPlaceId = attractionPlaces[0]?.id || apiPlaces[0].id;
-        apiStatus.textContent =
-          attractionPlaces.length > 0
-            ? `${attractionPlaces.length} nearby attraction${
-                attractionPlaces.length === 1 ? "" : "s"
-              } loaded with location details from OpenStreetMap.`
-            : `${apiPlaces.length} live location${
-                apiPlaces.length === 1 ? "" : "s"
-              } loaded from OpenStreetMap.`;
-      } else {
-        apiStatus.textContent = "No live locations found. Try a broader search.";
-      }
-
+      apiPlaces = [];
+      apiStatus.textContent =
+        "No strong catalog match found. Try adding a landmark, city, or feature.";
       renderApp();
     } catch (error) {
-      apiStatus.textContent =
-        "Live location search failed. The curated places are still available.";
+      apiStatus.textContent = "Search matching failed. The curated places are still available.";
     } finally {
       apiSearchButton.disabled = false;
     }
@@ -2298,7 +2356,26 @@ loginForm.addEventListener("submit", async (event) => {
 
 signupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  signupStatus.textContent = "Creating account...";
+
+  const password = signupPasswordInput.value;
+  const confirmPassword = signupConfirmPasswordInput.value;
+  signupConfirmPasswordInput.setCustomValidity("");
+  const passwordError = getPasswordPolicyError(password);
+
+  if (passwordError) {
+    setStatus(signupStatus, passwordError, false);
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    signupConfirmPasswordInput.setCustomValidity("Passwords do not match.");
+    signupConfirmPasswordInput.reportValidity();
+    setStatus(signupStatus, "Passwords do not match.", false);
+    signupConfirmPasswordInput.focus();
+    return;
+  }
+
+  setStatus(signupStatus, "Creating account...", true);
   try {
     const data = await postJson("/api/signup", {
       username: signupUsernameInput.value.trim(),
@@ -2308,12 +2385,16 @@ signupForm.addEventListener("submit", async (event) => {
     pendingVerificationEmail = data.email || signupEmailInput.value.trim().toLowerCase();
     verifyEmailInput.value = pendingVerificationEmail;
     verifyCodeInput.value = "";
-    signupStatus.textContent = "";
+    setStatus(signupStatus, "", false);
     verifyStatus.textContent = data.message || "Verification code sent. Check your email.";
     showAuthScreen("verify");
   } catch (error) {
-    signupStatus.textContent = error.message;
+    setStatus(signupStatus, error.message, false);
   }
+});
+
+signupConfirmPasswordInput.addEventListener("input", () => {
+  signupConfirmPasswordInput.setCustomValidity("");
 });
 
 verifyForm.addEventListener("submit", async (event) => {
@@ -2405,7 +2486,7 @@ document.getElementById("logout-confirm-btn")?.addEventListener("click", () => {
   handleLogout();
 });
 
-navExploreButton.addEventListener("click", () => {
+navExploreButton?.addEventListener("click", () => {
   setAppSection("explore");
 });
 
@@ -2418,13 +2499,19 @@ document.querySelector("#close-profile-button")?.addEventListener("click", () =>
   setAppSection("explore");
 });
 
-navWishlistButton.addEventListener("click", () => {
+navWishlistButton?.addEventListener("click", () => {
   setAppSection("wishlist");
   renderWishlist();
 });
 
 searchInput.addEventListener("input", renderApp);
 apiSearchButton.addEventListener("click", searchLiveLocations);
+searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchLiveLocations();
+  }
+});
 bookingForm.addEventListener("submit", searchBookingOptions);
 countryFilter.addEventListener("change", () => {
   stateFilter.value = "";

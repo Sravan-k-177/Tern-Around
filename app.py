@@ -6,6 +6,7 @@ import json
 import os
 import re
 import secrets
+import urllib.parse
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
@@ -48,7 +49,8 @@ def set_security_headers(response):
         "default-src 'self'; script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
         "connect-src 'self' https://api.brevo.com https://en.wikipedia.org "
-        "https://countriesnow.space https://raw.githubusercontent.com https://overpass-api.de"
+        "https://countriesnow.space https://raw.githubusercontent.com https://overpass-api.de "
+        "https://nominatim.openstreetmap.org"
     )
     return response
 
@@ -70,6 +72,20 @@ MYSQL_CONFIG = {
 }
 
 DATABASE_READY = False
+
+
+def validate_password(password: str) -> str | None:
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if not re.search(r"[a-z]", password):
+        return "Password must include at least one lowercase letter."
+    if not re.search(r"[A-Z]", password):
+        return "Password must include at least one uppercase letter."
+    if not re.search(r"\d", password):
+        return "Password must include at least one number."
+    if not re.search(r"[^\w\s]", password):
+        return "Password must include at least one special character."
+    return None
 
 SEED_PLACES: list[dict[str, Any]] = [
     {
@@ -636,6 +652,56 @@ def script_js() -> Any:
     return send_from_directory(BASE_DIR, "script.js")
 
 
+@app.post("/api/geocode-place")
+def api_geocode_place() -> Any:
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query", "")).strip()
+
+    if not query:
+        return jsonify({"error": "query is required."}), 400
+
+    params = urllib.parse.urlencode(
+        {
+            "q": query,
+            "format": "jsonv2",
+            "limit": "1",
+            "accept-language": "en",
+        }
+    )
+    request_url = f"https://nominatim.openstreetmap.org/search?{params}"
+    request_obj = urllib.request.Request(
+        request_url,
+        headers={
+            "User-Agent": "Tern-Around/1.0 (+https://localhost)",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request_obj, timeout=15) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"Geocoder returned HTTP {response.status}")
+
+            results = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        return jsonify({"result": None})
+
+    result = results[0] if results else None
+    if not result:
+        return jsonify({"result": None})
+
+    return jsonify(
+        {
+            "result": {
+                "lat": result.get("lat"),
+                "lon": result.get("lon"),
+                "display_name": result.get("display_name"),
+                "name": result.get("name"),
+            }
+        }
+    )
+
+
 @app.get("/api/places")
 def api_places() -> Any:
     return jsonify({"places": load_places() if DATABASE_READY else load_seed_places()})
@@ -746,8 +812,9 @@ def api_signup() -> Any:
     if not name or not email or not password:
         return jsonify({"error": "Username, email, and password are required."}), 400
 
-    if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters."}), 400
+    password_error = validate_password(password)
+    if password_error is not None:
+        return jsonify({"error": password_error}), 400
 
     connection = connect_database()
     cursor = connection.cursor(dictionary=True)
@@ -1279,6 +1346,703 @@ def build_catalog(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for country, states in sorted(catalog.items(), key=lambda item: item[0])
     ]
+
+
+SEARCH_INTENT_RULES: list[dict[str, Any]] = [
+    {
+        "keywords": ("biryani", "haleem", "hyderabadi", "kebab", "charminar"),
+        "preferredPlaceId": "charminar",
+        "reason": "Hyderabad-style food and Old City searches usually map best to Charminar.",
+    },
+    {
+        "keywords": ("fort", "palace", "heritage", "royal", "mirror work"),
+        "preferredPlaceId": "amber-fort",
+        "reason": "Heritage and royal-route searches usually map best to Amber Fort.",
+    },
+    {
+        "keywords": ("monument", "old city", "bazaar", "pearls", "bangles"),
+        "preferredPlaceId": "charminar",
+        "reason": "Old City monument and bazaar searches usually map best to Charminar.",
+    },
+    {
+        "keywords": ("harbor", "ferry", "waterfront", "skyline", "statue"),
+        "preferredPlaceId": "gateway-of-india",
+        "reason": "Harbor and ferry searches usually map best to Gateway of India.",
+    },
+    {
+        "keywords": ("tower", "ruins", "garden", "metro", "heritage complex"),
+        "preferredPlaceId": "qutub-minar",
+        "reason": "Stone-heritage and metro-access searches often map best to Qutub Minar.",
+    },
+    {
+        "keywords": ("iron tower", "river", "paris", "romantic", "viewpoint"),
+        "preferredPlaceId": "eiffel-tower",
+        "reason": "Riverfront and viewpoint searches usually map best to the Eiffel Tower.",
+    },
+]
+
+
+def normalize_search_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+
+def extract_json_object(text: str) -> dict[str, Any]:
+    payload = str(text or "").strip()
+    if not payload:
+        return {}
+
+    try:
+        parsed = json.loads(payload)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    start = payload.find("{")
+    end = payload.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(payload[start : end + 1])
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return {}
+
+    return {}
+
+
+def coerce_search_intent_payload(payload: dict[str, Any], fallback_query: str, source: str) -> dict[str, Any]:
+    destination_query = str(
+        payload.get("destinationQuery")
+        or payload.get("destination")
+        or payload.get("searchQuery")
+        or payload.get("normalizedQuery")
+        or fallback_query
+    ).strip()
+
+    reason = str(payload.get("reason") or "").strip() or "Using the search query directly."
+    suggested_country = str(payload.get("suggestedCountry") or payload.get("country") or "").strip()
+    suggested_state = str(payload.get("suggestedState") or payload.get("state") or "").strip()
+    suggested_type = str(payload.get("suggestedType") or payload.get("type") or "").strip()
+
+    confidence = payload.get("confidence", 0.5)
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        confidence_value = 0.5
+    confidence_value = max(0.0, min(1.0, confidence_value))
+
+    return {
+        "query": fallback_query,
+        "normalizedQuery": fallback_query,
+        "destinationQuery": destination_query or fallback_query,
+        "reason": reason,
+        "confidence": confidence_value,
+        "source": source,
+        "suggestedCountry": suggested_country,
+        "suggestedState": suggested_state,
+        "suggestedType": suggested_type,
+    }
+
+
+def resolve_known_place_destination(query: str, places: list[dict[str, Any]]) -> dict[str, Any] | None:
+    normalized_query = normalize_search_text(query)
+    if not normalized_query:
+        return None
+
+    for place in places:
+        candidate_tokens = [
+            place.get("name", ""),
+            place.get("city", ""),
+            place.get("state", ""),
+            place.get("country", ""),
+        ]
+        candidate_text = normalize_search_text(" ".join(candidate_tokens))
+        if normalized_query in candidate_text:
+            return {
+                "destinationQuery": f"{place['name']}, {place['city']}, {place['country']}",
+                "suggestedCountry": place.get("country", ""),
+                "suggestedState": place.get("state", ""),
+                "suggestedType": place.get("type", ""),
+                "reason": f"Matched a known destination in the catalog: {place['name']}.",
+                "confidence": 0.94,
+            }
+
+    return None
+
+
+def tokenize_search_text(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", normalize_search_text(value))
+
+
+def build_place_search_blob(place: dict[str, Any]) -> str:
+    underdog = place.get("underdog") or {}
+    ticketing = place.get("ticketing") or []
+    ticket_text = " ".join(
+        f"{ticket.get('service', '')} {ticket.get('label', '')}"
+        for ticket in ticketing
+        if isinstance(ticket, dict)
+    )
+    return normalize_search_text(
+        " ".join(
+            [
+                place.get("name", ""),
+                place.get("city", ""),
+                place.get("state", ""),
+                place.get("country", ""),
+                place.get("type", ""),
+                place.get("summary", ""),
+                " ".join(place.get("tags", [])),
+                " ".join(place.get("transport", [])),
+                place.get("challenge", ""),
+                underdog.get("name", ""),
+                underdog.get("description", ""),
+                ticket_text,
+            ]
+        )
+    )
+
+
+def score_place_match(
+    query: str,
+    place: dict[str, Any],
+    country_filter: str,
+    state_filter: str,
+    type_filter: str,
+) -> tuple[float, list[str]] | None:
+    if country_filter and place.get("country") != country_filter:
+        return None
+    if state_filter and place.get("state") != state_filter:
+        return None
+    if type_filter and place.get("type") != type_filter:
+        return None
+
+    normalized_query = normalize_search_text(query)
+    if not normalized_query:
+        return None
+
+    query_tokens = set(tokenize_search_text(normalized_query))
+    if not query_tokens:
+        return None
+
+    blob = build_place_search_blob(place)
+    if not blob:
+        return None
+
+    score = 0.0
+    reasons: list[str] = []
+
+    name = normalize_search_text(place.get("name", ""))
+    city = normalize_search_text(place.get("city", ""))
+    state = normalize_search_text(place.get("state", ""))
+    country = normalize_search_text(place.get("country", ""))
+    place_type = normalize_search_text(place.get("type", ""))
+    tags = {normalize_search_text(tag) for tag in place.get("tags", []) if tag}
+    name_tokens = set(tokenize_search_text(name))
+    city_tokens = set(tokenize_search_text(city))
+    state_tokens = set(tokenize_search_text(state))
+    country_tokens = set(tokenize_search_text(country))
+    type_tokens = set(tokenize_search_text(place_type))
+
+    if name and name in normalized_query:
+        score += 30
+        reasons.append(f"name matched {place.get('name')}")
+    elif normalized_query in name:
+        score += 24
+        reasons.append(f"query matches the place name {place.get('name')}")
+
+    if city and city in normalized_query:
+        score += 10
+        reasons.append(f"city matched {place.get('city')}")
+    if state and state in normalized_query:
+        score += 8
+        reasons.append(f"state matched {place.get('state')}")
+    if country and country in normalized_query:
+        score += 6
+        reasons.append(f"country matched {place.get('country')}")
+
+    matched_tokens: list[str] = []
+    for token in query_tokens:
+        if token not in blob:
+            continue
+
+        matched_tokens.append(token)
+        if token in name_tokens:
+            score += 6
+        elif token in city_tokens:
+            score += 5
+        elif token in state_tokens:
+            score += 4
+        elif token in country_tokens:
+            score += 3
+        elif token in type_tokens:
+            score += 4
+        elif token in tags:
+            score += 5
+        else:
+            score += 1.5
+
+    if matched_tokens:
+        reasons.append(f"matched tokens: {', '.join(matched_tokens[:6])}")
+
+    for rule in SEARCH_INTENT_RULES:
+        if any(keyword in normalized_query for keyword in rule["keywords"]):
+            score += 2
+            preferred_place_id = rule.get("preferredPlaceId")
+            if preferred_place_id and place.get("id") == preferred_place_id:
+                score += 10
+                reasons.append(rule["reason"])
+
+    return score, reasons
+
+
+def rank_search_matches(
+    query: str,
+    country_filter: str,
+    state_filter: str,
+    type_filter: str,
+    places: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ranked: list[dict[str, Any]] = []
+
+    for place in places:
+        scored = score_place_match(query, place, country_filter, state_filter, type_filter)
+        if scored is None:
+            continue
+
+        score, reasons = scored
+        if score <= 0:
+            continue
+
+        ranked.append(
+            {
+                "place": place,
+                "score": score,
+                "reason": "; ".join(reasons) if reasons else "Matched the travel description.",
+            }
+        )
+
+    ranked.sort(key=lambda item: item["score"], reverse=True)
+    return ranked
+
+
+def call_openai_place_matcher(
+    query: str,
+    country_filter: str,
+    state_filter: str,
+    type_filter: str,
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    api_url = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions").strip()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    known_places = [
+        {
+            "id": candidate.get("place", {}).get("id", ""),
+            "name": candidate.get("place", {}).get("name", ""),
+            "city": candidate.get("place", {}).get("city", ""),
+            "state": candidate.get("place", {}).get("state", ""),
+            "country": candidate.get("place", {}).get("country", ""),
+            "type": candidate.get("place", {}).get("type", ""),
+            "summary": candidate.get("place", {}).get("summary", ""),
+            "tags": list(candidate.get("place", {}).get("tags", []))[:4],
+        }
+        for candidate in candidates[:8]
+    ]
+
+    request_payload = {
+        "model": model,
+        "temperature": 0.1,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a travel place matcher. Choose the single best place from the provided candidate list that matches the user's natural-language description. "
+                    "Return only valid JSON with these keys: placeId, reason, confidence. "
+                    "Do not invent new places. If none of the candidates fit, return an empty placeId."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "query": query,
+                        "countryFilter": country_filter,
+                        "stateFilter": state_filter,
+                        "typeFilter": type_filter,
+                        "knownPlaces": known_places,
+                    }
+                ),
+            },
+        ],
+    }
+
+    request = urllib.request.Request(
+        api_url,
+        data=json.dumps(request_payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"OpenAI returned HTTP {response.status}")
+
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        return None
+
+    content = ""
+    choices = response_payload.get("choices") or []
+    if choices:
+        message = choices[0].get("message") or {}
+        content = str(message.get("content") or "")
+
+    parsed = extract_json_object(content)
+    if not parsed:
+        return None
+
+    place_id = str(parsed.get("placeId") or "").strip()
+    reason = str(parsed.get("reason") or "").strip() or "AI selected the best matching place."
+
+    confidence = parsed.get("confidence", 0.5)
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        confidence_value = 0.5
+    confidence_value = max(0.0, min(1.0, confidence_value))
+
+    return {
+        "placeId": place_id,
+        "reason": reason,
+        "confidence": confidence_value,
+    }
+
+
+def slugify_text(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "destination"
+
+
+def build_generated_place_id(query: str) -> str:
+    digest = hashlib.sha1(query.strip().lower().encode("utf-8")).hexdigest()[:10]
+    return f"generated-{slugify_text(query)[:48]}-{digest}"
+
+
+def build_fallback_generated_place(
+    query: str,
+    country_filter: str,
+    state_filter: str,
+    type_filter: str,
+) -> dict[str, Any]:
+    cleaned_query = query.strip() or "Custom destination"
+    place_name = cleaned_query[:1].upper() + cleaned_query[1:]
+    place_type = type_filter or ("Country" if len(cleaned_query.split()) == 1 else "Destination")
+    country = country_filter or "Unlisted country"
+    state = state_filter or "Unlisted state"
+
+    return {
+        "id": build_generated_place_id(cleaned_query),
+        "name": place_name,
+        "country": country,
+        "state": state,
+        "city": place_name,
+        "type": place_type,
+        "imageQuery": f"{place_name} travel",
+        "summary": f"A generated travel card for {place_name}. Tern-Around will refine this with GPT or live data when available.",
+        "bestTime": "Plan around daylight",
+        "tags": [place_type.lower(), country.lower(), state.lower(), "generated"],
+        "transport": [
+            "Open live maps for directions",
+            "Use local transport or rideshare based on your route",
+            "Refine this card with more specific place details later",
+        ],
+        "ticketing": [
+            {
+                "service": "Google Maps",
+                "label": "Open route search",
+                "url": "https://www.google.com/maps",
+            },
+            {
+                "service": "Google Search",
+                "label": "Find live details",
+                "url": "https://www.google.com/search",
+            },
+            {
+                "service": "Booking.com",
+                "label": "Nearby stays",
+                "url": "https://www.booking.com/",
+            },
+        ],
+        "challenge": f"Open {place_name}, confirm one real-world detail, and save it as a new card.",
+        "underdog": {
+            "name": f"Nearby hidden spots around {place_name}",
+            "distance": "Use live search results",
+            "transport": "Open Maps from the travel actions above",
+            "description": "This is a generated destination card. Add a more specific place later to unlock nearby details.",
+        },
+        "source": "Generated travel card",
+        "generated": True,
+    }
+
+
+def call_openai_generated_place(
+    query: str,
+    country_filter: str,
+    state_filter: str,
+    type_filter: str,
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    api_url = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions").strip()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    nearby_places = [
+        {
+            "name": candidate.get("place", {}).get("name", ""),
+            "city": candidate.get("place", {}).get("city", ""),
+            "state": candidate.get("place", {}).get("state", ""),
+            "country": candidate.get("place", {}).get("country", ""),
+            "type": candidate.get("place", {}).get("type", ""),
+            "summary": candidate.get("place", {}).get("summary", ""),
+        }
+        for candidate in candidates[:5]
+    ]
+
+    request_payload = {
+        "model": model,
+        "temperature": 0.3,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You create a new travel destination card from a user request when no catalog match is strong enough. "
+                    "Return only JSON with keys: name, country, state, city, type, imageQuery, summary, bestTime, tags, transport, ticketing, challenge, underdog. "
+                    "Do not copy an existing catalog place unless the request clearly names it. "
+                    "Keep the data realistic and travel-oriented."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "query": query,
+                        "countryFilter": country_filter,
+                        "stateFilter": state_filter,
+                        "typeFilter": type_filter,
+                        "nearbyPlaces": nearby_places,
+                    }
+                ),
+            },
+        ],
+    }
+
+    request = urllib.request.Request(
+        api_url,
+        data=json.dumps(request_payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"OpenAI returned HTTP {response.status}")
+
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        return None
+
+    content = ""
+    choices = response_payload.get("choices") or []
+    if choices:
+        message = choices[0].get("message") or {}
+        content = str(message.get("content") or "")
+
+    parsed = extract_json_object(content)
+    if not parsed:
+        return None
+
+    generated_place = build_fallback_generated_place(query, country_filter, state_filter, type_filter)
+    generated_place.update(
+        {
+            "name": str(parsed.get("name") or generated_place["name"]).strip(),
+            "country": str(parsed.get("country") or generated_place["country"]).strip(),
+            "state": str(parsed.get("state") or generated_place["state"]).strip(),
+            "city": str(parsed.get("city") or generated_place["city"]).strip(),
+            "type": str(parsed.get("type") or generated_place["type"]).strip(),
+            "imageQuery": str(parsed.get("imageQuery") or f"{generated_place['name']} travel").strip(),
+            "summary": str(parsed.get("summary") or generated_place["summary"]).strip(),
+            "bestTime": str(parsed.get("bestTime") or generated_place["bestTime"]).strip(),
+            "tags": parsed.get("tags") if isinstance(parsed.get("tags"), list) else generated_place["tags"],
+            "transport": parsed.get("transport") if isinstance(parsed.get("transport"), list) else generated_place["transport"],
+            "ticketing": parsed.get("ticketing") if isinstance(parsed.get("ticketing"), list) else generated_place["ticketing"],
+            "challenge": str(parsed.get("challenge") or generated_place["challenge"]).strip(),
+            "underdog": parsed.get("underdog") if isinstance(parsed.get("underdog"), dict) else generated_place["underdog"],
+            "source": "OpenAI generated travel card",
+            "generated": True,
+        }
+    )
+    generated_place["id"] = build_generated_place_id(query)
+    return generated_place
+
+
+def persist_generated_place(place: dict[str, Any]) -> None:
+    if not DATABASE_READY:
+        return
+
+    connection = connect_database()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO places (
+                id, name, country, state, city, type, image_query,
+                summary, best_time, tags, transport, ticketing,
+                challenge, underdog, lat, lon, source
+            ) VALUES (
+                %(id)s, %(name)s, %(country)s, %(state)s, %(city)s, %(type)s, %(image_query)s,
+                %(summary)s, %(best_time)s, %(tags)s, %(transport)s, %(ticketing)s,
+                %(challenge)s, %(underdog)s, %(lat)s, %(lon)s, %(source)s
+            )
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                country = VALUES(country),
+                state = VALUES(state),
+                city = VALUES(city),
+                type = VALUES(type),
+                image_query = VALUES(image_query),
+                summary = VALUES(summary),
+                best_time = VALUES(best_time),
+                tags = VALUES(tags),
+                transport = VALUES(transport),
+                ticketing = VALUES(ticketing),
+                challenge = VALUES(challenge),
+                underdog = VALUES(underdog),
+                lat = VALUES(lat),
+                lon = VALUES(lon),
+                source = VALUES(source)
+            """,
+            {
+                "id": place["id"],
+                "name": place["name"],
+                "country": place["country"],
+                "state": place["state"],
+                "city": place["city"],
+                "type": place["type"],
+                "image_query": place.get("imageQuery", place["name"]),
+                "summary": place["summary"],
+                "best_time": place.get("bestTime", "Plan around daylight"),
+                "tags": json.dumps(place.get("tags", [])),
+                "transport": json.dumps(place.get("transport", [])),
+                "ticketing": json.dumps(place.get("ticketing", [])),
+                "challenge": place.get("challenge", ""),
+                "underdog": json.dumps(place.get("underdog", {})),
+                "lat": place.get("lat"),
+                "lon": place.get("lon"),
+                "source": place.get("source"),
+            },
+        )
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/api/search-intent")
+def api_search_intent() -> Any:
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query", "")).strip()
+    country_filter = str(data.get("country", "")).strip()
+    state_filter = str(data.get("state", "")).strip()
+    type_filter = str(data.get("type", "")).strip()
+
+    if not query:
+        return jsonify({"error": "query is required."}), 400
+
+    places = load_places() if DATABASE_READY else load_seed_places()
+    normalized_query = re.sub(r"\s+", " ", query).strip()
+
+    ranked_matches = rank_search_matches(query, country_filter, state_filter, type_filter, places)
+    ai_result = call_openai_place_matcher(query, country_filter, state_filter, type_filter, ranked_matches[:8])
+
+    best_match = None
+    source = "heuristic"
+
+    if ai_result and ai_result.get("placeId"):
+        for entry in ranked_matches:
+            if entry["place"].get("id") == ai_result["placeId"]:
+                best_match = entry
+                source = "ai"
+                break
+
+    if best_match is None and ranked_matches:
+        top_match = ranked_matches[0]
+        if top_match["score"] >= 15:
+            best_match = top_match
+
+    alternatives = [entry["place"] for entry in ranked_matches[1:4]]
+
+    if best_match is None:
+        generated_place = call_openai_generated_place(query, country_filter, state_filter, type_filter, ranked_matches[:5])
+        if generated_place is None:
+            generated_place = build_fallback_generated_place(query, country_filter, state_filter, type_filter)
+
+        if DATABASE_READY:
+            persist_generated_place(generated_place)
+
+        return jsonify(
+            {
+                "query": query,
+                "normalizedQuery": normalized_query,
+                "source": generated_place.get("source", "generated"),
+                "reason": "Created a new travel card from your request.",
+                "confidence": 0.35,
+                "matchedPlace": generated_place,
+                "generatedPlace": generated_place,
+                "alternatives": alternatives,
+            }
+        )
+
+    confidence = min(1.0, best_match["score"] / 20.0)
+    if ai_result and ai_result.get("confidence") is not None:
+        try:
+            confidence = max(confidence, float(ai_result["confidence"]))
+        except (TypeError, ValueError):
+            pass
+
+    reason = best_match["reason"]
+    if ai_result and ai_result.get("reason"):
+        reason = ai_result["reason"]
+
+    return jsonify(
+        {
+            "query": query,
+            "normalizedQuery": normalized_query,
+            "source": source,
+            "reason": reason,
+            "confidence": confidence,
+            "matchedPlace": best_match["place"],
+            "alternatives": alternatives,
+        }
+    )
 
 
 if __name__ == "__main__":

@@ -1020,13 +1020,20 @@ p {
   }
 
   .filter-grid,
-  .api-search-row,
   .ticket-links,
   .travel-actions,
   .detail-actions-row,
   .booking-form,
   .booking-results {
     grid-template-columns: 1fr;
+  }
+
+  .api-search-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .api-search-row input {
+    min-width: 0;
   }
 
   .detail-heading {
@@ -1177,8 +1184,26 @@ p {
 }
 
 @media (max-width: 640px) {
+  #explore-section .place-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    padding: 4px 2px 12px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #explore-section .place-card {
+    flex: 0 0 min(78vw, 260px);
+    scroll-snap-align: start;
+  }
+
   .place-card {
-    flex: 0 0 160px;
+    flex: 0 0 min(78vw, 260px);
   }
 
   .place-card img {

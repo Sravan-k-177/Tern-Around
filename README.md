@@ -13,7 +13,7 @@ Tern-Around is a travel quest app.
 - `app.py`: Flask app, API routes, DB bootstrap + seed data
 - `schema.sql`: SQL schema for manual DB setup
 - `requirements.txt`: Python dependencies
-- `.env.example`: Environment variable template
+- `.env`: Environment variable file
 
 ## Key Features
 
@@ -24,6 +24,7 @@ Tern-Around is a travel quest app.
 - Profile section with contact details and visited quest badges
 - Wishlist section with add/remove saved locations
 - Quest completion tracking persisted in MySQL
+- Semantic place search that maps feature descriptions to the best matching card
 
 ## 1. Clone The Repository
 
@@ -63,11 +64,7 @@ This includes:
 
 ## 4. Configure Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values:
-
-```bash
-cp .env.example .env
-```
+Edit the `.env` file in the project root and fill in your values.
 
 Required variables:
 
@@ -195,7 +192,23 @@ git push
 - `GET /api/bootstrap`
 - `POST /api/phone/send-code`
 - `POST /api/phone/verify-code`
+- `POST /api/search-intent`
 - `POST /api/quests/complete`
 - `GET /api/wishlist`
 - `POST /api/wishlist`
 - `DELETE /api/wishlist`
+
+## Natural Language Search
+
+The explore search bar now matches descriptions to the closest place card in your catalog:
+
+- "I want the best biryani" can map to Charminar.
+- "Mirror work, forts, and royal courtyards" can map to Amber Fort.
+- "Harbor, ferry, and skyline views" can map to Gateway of India.
+
+The frontend sends the description to `POST /api/search-intent`, and the backend ranks the available places. If `OPENAI_API_KEY` is configured, the server can use the AI model to choose between the top ranked candidates. If it is not configured, the built-in matcher still works.
+
+Optional environment variables:
+
+- `OPENAI_API_KEY`: Enables AI-assisted place matching.
+- `OPENAI_MODEL`: Overrides the model used by the AI matcher.

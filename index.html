@@ -9,9 +9,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#6366f1">
   <title>Tern-Around</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -60,7 +57,14 @@
         <input id="signup-email-input" name="email" type="email" placeholder="you@example.com" required>
 
         <label for="signup-password-input">Password</label>
-        <input id="signup-password-input" name="password" type="password" placeholder="Create password" required>
+        <input id="signup-password-input" name="password" type="password" placeholder="Create password"
+          minlength="8" autocomplete="new-password" required>
+
+        <label for="signup-confirm-password-input">Confirm Password</label>
+        <input id="signup-confirm-password-input" name="confirmPassword" type="password"
+          placeholder="Re-enter password" minlength="8" autocomplete="new-password" required>
+
+        <p class="form-help">Use at least 8 characters with uppercase, lowercase, a number, and a symbol.</p>
 
         <p class="api-status" id="signup-status" aria-live="polite"></p>
 
@@ -113,10 +117,8 @@
       </header>
 
       <!-- hidden element kept for script compat -->
-      <span id="pass-status" class="is-hidden">Explorer Select</span>
-
-      <nav class="app-nav" aria-label="App sections">
-        <button type="button" class="app-nav-button is-active" id="nav-explore-button">Explore</button>
+      <nav class="app-nav">
+        <span id="pass-status" class="is-hidden">Explorer Select</span>
         <button type="button" class="app-nav-button" id="nav-wishlist-button">Wishlist</button>
       </nav>
 
@@ -124,11 +126,11 @@
         <section class="search-panel" aria-label="Search and filters">
           <label for="search-input">Search places</label>
           <div class="api-search-row">
-            <input id="search-input" type="search" placeholder="Try biryani, Jaipur, France, restaurant, or museum">
-            <button type="button" id="api-search-button">Search live</button>
+            <input id="search-input" type="search" placeholder="Describe a place, landmark, or feature">
+            <button type="button" id="api-search-button">Find place</button>
           </div>
           <p class="api-status" id="api-status">
-            Curated places are ready. Live search uses OpenStreetMap location data.
+            Curated places are ready. Describe a place to match it to the best card.
           </p>
 
           <div class="filter-grid">
@@ -237,6 +239,18 @@
               <div id="profile-badges"></div>
             </div>
           </article>
+        
+              <article class="detail-panel profile-card">
+                <div class="detail-content">
+                  <div class="section-heading">
+                    <div>
+                      <span class="section-kicker">Wishlist</span>
+                      <h2>Wishlist badges</h2>
+                    </div>
+                  </div>
+                  <div id="profile-wishlist-badges"></div>
+                </div>
+              </article>
         </div>
       </section>
 
