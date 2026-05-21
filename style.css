@@ -1518,10 +1518,15 @@ p {
   align-items: center;
   justify-content: center;
   gap: 5px;
+  position: sticky;
+  right: 0;
+  margin-left: auto;
+  z-index: 1;
   border: 1px dashed var(--accent);
   color: var(--accent-dark);
   font-weight: 700;
   background: var(--paper);
+  box-shadow: -8px 0 12px rgba(255, 255, 255, 0.92);
 }
 
 .badge-strip-all-btn:hover {
