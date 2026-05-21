@@ -1,16 +1,16 @@
 :root {
   color-scheme: light;
-  --ink: #17211d;
-  --muted: #5d6c65;
-  --paper: #f6faf8;
+  --ink: #0b1220; /* deep ink */
+  --muted: #6b7280; /* soft gray */
+  --paper: #f7f6f2; /* warm off-white */
   --panel: #ffffff;
-  --line: #d7e3dc;
-  --accent: #087f5b;
-  --accent-dark: #04563f;
-  --sun: #f4b942;
-  --coral: #e85d4f;
-  --sky: #dff3ff;
-  --shadow: 0 16px 40px rgba(23, 33, 29, 0.14);
+  --line: #e6e7ee; /* subtle divider */
+  --accent: #2b3a67; /* Pokemon Go navy */
+  --accent-dark: #1f2a4a; /* darker navy */
+  --sun: #ffd400; /* Pokemon yellow accent */
+  --coral: #d62e2e; /* pokeball red */
+  --sky: #d9e9ff; /* pale sky */
+  --shadow: 0 16px 40px rgba(11, 18, 32, 0.14);
 }
 
 * {
@@ -23,9 +23,9 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 8% 8%, rgba(244, 185, 66, 0.28), transparent 32%),
-    radial-gradient(circle at 90% 12%, rgba(8, 127, 91, 0.22), transparent 34%),
-    linear-gradient(122deg, #f6faf8 0%, #dff3ff 48%, #fdf5e8 100%);
+    radial-gradient(circle at 8% 8%, rgba(255, 212, 64, 0.12), transparent 32%),
+    radial-gradient(circle at 90% 12%, rgba(43, 58, 103, 0.12), transparent 34%),
+    linear-gradient(122deg, #0f1724 0%, #2b3a67 48%, #fff7d0 100%);
   background-attachment: fixed;
   background-size: cover;
   background-position: center;
@@ -45,7 +45,7 @@ body::before {
   width: 420px;
   height: 420px;
   border-radius: 45% 55% 55% 45%;
-  background: rgba(8, 127, 91, 0.15);
+  background: rgba(43, 58, 103, 0.12);
   filter: blur(1px);
 }
 
@@ -55,7 +55,7 @@ body::after {
   width: 380px;
   height: 380px;
   border-radius: 58% 42% 36% 64%;
-  background: rgba(232, 93, 79, 0.14);
+  background: rgba(214, 46, 46, 0.10);
 }
 
 button,
@@ -104,7 +104,7 @@ button {
   border-radius: 16px;
   background:
     radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.48), transparent 42%),
-    linear-gradient(130deg, rgba(8, 127, 91, 0.14), rgba(223, 243, 255, 0.6), rgba(244, 185, 66, 0.24));
+    linear-gradient(130deg, rgba(43, 58, 103, 0.14), rgba(223, 243, 255, 0.6), rgba(244, 185, 66, 0.24));
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
@@ -123,6 +123,11 @@ button {
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+/* Top-bar eyebrow should be light on dark header */
+#main-top-bar .eyebrow {
+  color: #ffffff;
 }
 
 h1,
@@ -175,8 +180,12 @@ p {
 }
 
 .login-screen .brand-panel {
-  padding-right: 8
-  px;
+  padding-right: 8px;
+}
+
+/* Ensure the small eyebrow in the login/brand panel is visible on dark background */
+.login-screen .brand-panel .eyebrow {
+  color: #ffffff;
 }
 
 .login-card label,
@@ -185,6 +194,12 @@ p {
   color: var(--muted);
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+/* Prevent long label text from overflowing their containers */
+.login-card label {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .login-card input,
@@ -203,7 +218,7 @@ p {
 .search-panel input:focus,
 .search-panel select:focus,
 .booking-form input:focus {
-  outline: 3px solid rgba(8, 127, 91, 0.22);
+  outline: 3px solid rgba(43, 58, 103, 0.22);
   border-color: var(--accent);
 }
 
@@ -285,6 +300,20 @@ p {
 .top-bar h1 {
   margin-bottom: 0;
   font-size: clamp(2rem, 5vw, 4.2rem);
+}
+
+/* Make main headings and back/profile labels light for contrast */
+.top-bar h1,
+.profile-page-title,
+.back-button {
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(11, 18, 32, 0.55);
+}
+
+.back-button svg,
+.profile-page-header svg,
+#main-top-bar svg {
+  color: inherit; /* ensure svg strokes follow text color */
 }
 
 .secondary-action {
@@ -481,7 +510,7 @@ p {
 
 .place-card.is-active {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 2px rgba(8, 127, 91, 0.18);
+  box-shadow: inset 0 0 0 2px rgba(43, 58, 103, 0.18);
 }
 
 .place-card img {
@@ -543,7 +572,7 @@ p {
   border-radius: 8px;
   color: var(--accent-dark);
   font-weight: 700;
-  background: #e7f5ef;
+  background: var(--sky);
 }
 
 .travel-actions {
@@ -561,7 +590,7 @@ p {
   border: 1px solid var(--line);
   color: var(--ink);
   text-decoration: none;
-  background: #eef8f4;
+  background: var(--paper);
 }
 
 .travel-actions a:hover {
@@ -633,17 +662,17 @@ p {
 
 .quest-panel {
   border: 1px solid #f3d9a0;
-  background: #fff7e2;
+  background: #fff7d0;
 }
 
 .quest-panel.is-complete {
-  border-color: #a7dcc8;
-  background: #e9f8f2;
+  border-color: rgba(43, 58, 103, 0.12);
+  background: var(--sky);
 }
 
 .quest-panel.is-complete .primary-action {
   color: var(--accent-dark);
-  background: #cfeee1;
+  background: #fff7d0;
 }
 
 .detail-actions-row {
@@ -654,7 +683,7 @@ p {
 
 .hidden-panel {
   border: 1px dashed #b8c9c0;
-  background: #f4f7f5;
+  background: var(--paper);
 }
 
 .hidden-panel.is-unlocked {
@@ -851,7 +880,7 @@ p {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: linear-gradient(120deg, #eef8f3, #fff8eb);
+  background: linear-gradient(120deg, #eef6ff, #fff7d0);
 }
 
 .badge-card.compact-badge h3 {
@@ -896,7 +925,7 @@ p {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f8fcfa;
+  background: var(--paper);
 }
 
 .visit-capture-panel video {
@@ -943,7 +972,7 @@ p {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f8fcfa;
+  background: var(--paper);
   margin-bottom: 10px;
 }
 
@@ -1122,7 +1151,7 @@ p {
 }
 
 .place-card:hover {
-  box-shadow: 0 6px 22px rgba(8, 127, 91, 0.18);
+  box-shadow: 0 6px 22px rgba(43, 58, 103, 0.18);
 }
 
 .place-card img {
@@ -1243,7 +1272,7 @@ p {
   font-size: 1.05rem;
   line-height: 1;
   flex-shrink: 0;
-  border: 2px solid rgba(8, 127, 91, 0.35);
+  border: 2px solid rgba(43, 58, 103, 0.35);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
@@ -1289,13 +1318,13 @@ p {
   gap: 8px;
   border: 0;
   padding: 0;
-  color: var(--accent-dark);
+  color: #ffffff;
   font-weight: 700;
   background: transparent;
 }
 
 .back-button:hover {
-  color: var(--coral);
+  color: var(--sun);
 }
 
 .logout-button {
@@ -1343,7 +1372,7 @@ p {
   font-size: 2rem;
   line-height: 1;
   flex-shrink: 0;
-  border: 3px solid rgba(8, 127, 91, 0.35);
+  border: 3px solid rgba(43, 58, 103, 0.35);
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
 }
 
@@ -1387,7 +1416,7 @@ p {
 
 .avatar-picker-item.is-selected {
   border-color: var(--ink);
-  box-shadow: 0 0 0 2px rgba(8, 127, 91, 0.24);
+  box-shadow: 0 0 0 2px rgba(43, 58, 103, 0.24);
 }
 
 /* Badges strip inside profile */
@@ -1408,7 +1437,7 @@ p {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: linear-gradient(120deg, #eef8f3, #fff8eb);
+  background: linear-gradient(120deg, #eef6ff, #fff7d0);
 }
 
 .badge-chip-emoji {
@@ -1455,7 +1484,7 @@ p {
   border: 1px dashed var(--accent);
   color: var(--accent-dark);
   font-weight: 700;
-  background: #edf9f4;
+  background: var(--paper);
 }
 
 .badge-strip-all-btn:hover {
