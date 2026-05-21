@@ -303,6 +303,138 @@ const places = [
     }
   },
   {
+    id: "varkala-cliff",
+    name: "Varkala Cliff",
+    country: "India",
+    state: "Kerala",
+    city: "Varkala",
+    type: "Beach View",
+    imageQuery: "Varkala Cliff Kerala",
+    summary:
+      "A dramatic cliffside stretch above the Arabian Sea with beach views, sunset walks, cafes, and long coastal horizons.",
+    bestTime: "5:15 PM",
+    tags: ["beach", "beaches", "sea", "cliff", "sunset", "coast", "view"],
+    transport: [
+      "Train to Varkala Sivagiri, then cab or auto to the cliff road",
+      "Local auto from Varkala town to the beach access points",
+      "Walk the cliff path for sunset viewpoints and cafes"
+    ],
+    ticketing: [
+      {
+        service: "Kerala Tourism",
+        label: "Official travel guide",
+        url: "https://www.keralatourism.org/"
+      },
+      {
+        service: "MakeMyTrip",
+        label: "Flights and stays",
+        url: "https://www.makemytrip.com/"
+      },
+      {
+        service: "RedBus",
+        label: "Bus tickets",
+        url: "https://www.redbus.in/"
+      }
+    ],
+    challenge:
+      "Catch the sunset line from the cliff edge and complete the quest once the sea view opens up.",
+    underdog: {
+      name: "Edava Beach Backwater Strip",
+      distance: "3.2 km",
+      transport: "12 min auto or scooter ride north along the coast",
+      description:
+        "A quieter coastal stretch with backwater edges, shoreline views, and fewer crowds than the main cliff."
+    }
+  },
+  {
+    id: "palolem-beach",
+    name: "Palolem Beach",
+    country: "India",
+    state: "Goa",
+    city: "Canacona",
+    type: "Beach",
+    imageQuery: "Palolem Beach Goa",
+    summary:
+      "A crescent beach with calm water, palm-lined views, colorful shacks, and easy sunset photo stops.",
+    bestTime: "4:45 PM",
+    tags: ["beach", "beaches", "sea", "shore", "sunset", "view"],
+    transport: [
+      "Train to Canacona, then short cab or auto ride",
+      "Drive or cab from Margao toward South Goa",
+      "Beach walk between the main access points and the northern curve"
+    ],
+    ticketing: [
+      {
+        service: "Goa Tourism",
+        label: "Official travel guide",
+        url: "https://www.goa-tourism.com/"
+      },
+      {
+        service: "MakeMyTrip",
+        label: "Flights and stays",
+        url: "https://www.makemytrip.com/"
+      },
+      {
+        service: "IRCTC",
+        label: "Train tickets",
+        url: "https://www.irctc.co.in/"
+      }
+    ],
+    challenge:
+      "Walk the full crescent and mark the quest complete when the shoreline opens up at the far curve.",
+    underdog: {
+      name: "Butterfly Beach",
+      distance: "6.5 km",
+      transport: "Boat or trek route via local operators",
+      description:
+        "A tucked-away cove with dramatic rock edges and a quieter view of the Arabian Sea."
+    }
+  },
+  {
+    id: "marina-beach",
+    name: "Marina Beach",
+    country: "India",
+    state: "Tamil Nadu",
+    city: "Chennai",
+    type: "Beach",
+    imageQuery: "Marina Beach Chennai",
+    summary:
+      "A long urban beach with sea breeze, sunrise walks, food stalls, and wide open shoreline views.",
+    bestTime: "6:15 AM",
+    tags: ["beach", "beaches", "sea", "shore", "sunrise", "view"],
+    transport: [
+      "Metro or cab to the Marina area and walk to the promenade",
+      "Local bus along the city coast road",
+      "Auto from central Chennai toward the beach access points"
+    ],
+    ticketing: [
+      {
+        service: "Tamil Nadu Tourism",
+        label: "Official travel guide",
+        url: "https://www.tamilnadutourism.tn.gov.in/"
+      },
+      {
+        service: "MakeMyTrip",
+        label: "Flights and stays",
+        url: "https://www.makemytrip.com/"
+      },
+      {
+        service: "RedBus",
+        label: "Bus tickets",
+        url: "https://www.redbus.in/"
+      }
+    ],
+    challenge:
+      "Find the seafront stretch with the widest open horizon and mark the quest complete at sunrise.",
+    underdog: {
+      name: "Besant Nagar Shoreline Walk",
+      distance: "8.1 km",
+      transport: "Cab or bus down the coast road",
+      description:
+        "A calmer promenade segment with cafes, sea air, and a more local evening rhythm."
+    }
+  },
+  {
     id: "eiffel-tower",
     name: "Eiffel Tower",
     country: "France",
@@ -762,7 +894,7 @@ function renderImageSource(place) {
   }
 
   const title = cachedImage.title ? `: ${escapeHtml(cachedImage.title)}` : "";
-  return `<p class="source-note">Photo from Wikipedia${title}.</p>`;
+  return `<p class="source-note">Featured photo${title}.</p>`;
 }
 
 async function fetchPlaceImage(place) {

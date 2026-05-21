@@ -176,7 +176,8 @@ p {
 .login-card {
   display: grid;
   gap: 12px;
-  padding: 22px;
+  padding: 18px;
+  margin-bottom: 2rem;
 }
 
 .login-screen .brand-panel {

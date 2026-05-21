@@ -44,6 +44,129 @@ def set_security_headers(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    {
+        "id": "varkala-cliff",
+        "name": "Varkala Cliff",
+        "country": "India",
+        "state": "Kerala",
+        "city": "Varkala",
+        "type": "Beach View",
+        "image_query": "Varkala Cliff Kerala",
+        "summary": "A dramatic cliffside stretch above the Arabian Sea with beach views, sunset walks, cafes, and long coastal horizons.",
+        "best_time": "5:15 PM",
+        "tags": ["beach", "beaches", "sea", "cliff", "sunset", "coast", "view"],
+        "transport": [
+            "Train to Varkala Sivagiri, then cab or auto to the cliff road",
+            "Local auto from Varkala town to the beach access points",
+            "Walk the cliff path for sunset viewpoints and cafes",
+        ],
+        "ticketing": [
+            {
+                "service": "Kerala Tourism",
+                "label": "Official travel guide",
+                "url": "https://www.keralatourism.org/",
+            },
+            {
+                "service": "MakeMyTrip",
+                "label": "Flights and stays",
+                "url": "https://www.makemytrip.com/",
+            },
+            {
+                "service": "RedBus",
+                "label": "Bus tickets",
+                "url": "https://www.redbus.in/",
+            },
+        ],
+        "challenge": "Catch the sunset line from the cliff edge and complete the quest once the sea view opens up.",
+        "underdog": {
+            "name": "Edava Beach Backwater Strip",
+            "distance": "3.2 km",
+            "transport": "12 min auto or scooter ride north along the coast",
+            "description": "A quieter coastal stretch with backwater edges, shoreline views, and fewer crowds than the main cliff.",
+        },
+    },
+    {
+        "id": "palolem-beach",
+        "name": "Palolem Beach",
+        "country": "India",
+        "state": "Goa",
+        "city": "Canacona",
+        "type": "Beach",
+        "image_query": "Palolem Beach Goa",
+        "summary": "A crescent beach with calm water, palm-lined views, colorful shacks, and easy sunset photo stops.",
+        "best_time": "4:45 PM",
+        "tags": ["beach", "beaches", "sea", "shore", "sunset", "view"],
+        "transport": [
+            "Train to Canacona, then short cab or auto ride",
+            "Drive or cab from Margao toward South Goa",
+            "Beach walk between the main access points and the northern curve",
+        ],
+        "ticketing": [
+            {
+                "service": "Goa Tourism",
+                "label": "Official travel guide",
+                "url": "https://www.goa-tourism.com/",
+            },
+            {
+                "service": "MakeMyTrip",
+                "label": "Flights and stays",
+                "url": "https://www.makemytrip.com/",
+            },
+            {
+                "service": "IRCTC",
+                "label": "Train tickets",
+                "url": "https://www.irctc.co.in/",
+            },
+        ],
+        "challenge": "Walk the full crescent and mark the quest complete when the shoreline opens up at the far curve.",
+        "underdog": {
+            "name": "Butterfly Beach",
+            "distance": "6.5 km",
+            "transport": "Boat or trek route via local operators",
+            "description": "A tucked-away cove with dramatic rock edges and a quieter view of the Arabian Sea.",
+        },
+    },
+    {
+        "id": "marina-beach",
+        "name": "Marina Beach",
+        "country": "India",
+        "state": "Tamil Nadu",
+        "city": "Chennai",
+        "type": "Beach",
+        "image_query": "Marina Beach Chennai",
+        "summary": "A long urban beach with sea breeze, sunrise walks, food stalls, and wide open shoreline views.",
+        "best_time": "6:15 AM",
+        "tags": ["beach", "beaches", "sea", "shore", "sunrise", "view"],
+        "transport": [
+            "Metro or cab to the Marina area and walk to the promenade",
+            "Local bus along the city coast road",
+            "Auto from central Chennai toward the beach access points",
+        ],
+        "ticketing": [
+            {
+                "service": "Tamil Nadu Tourism",
+                "label": "Official travel guide",
+                "url": "https://www.tamilnadutourism.tn.gov.in/",
+            },
+            {
+                "service": "MakeMyTrip",
+                "label": "Flights and stays",
+                "url": "https://www.makemytrip.com/",
+            },
+            {
+                "service": "RedBus",
+                "label": "Bus tickets",
+                "url": "https://www.redbus.in/",
+            },
+        ],
+        "challenge": "Find the seafront stretch with the widest open horizon and mark the quest complete at sunrise.",
+        "underdog": {
+            "name": "Besant Nagar Shoreline Walk",
+            "distance": "8.1 km",
+            "transport": "Cab or bus down the coast road",
+            "description": "A calmer promenade segment with cafes, sea air, and a more local evening rhythm.",
+        },
+    },
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self' 'unsafe-inline'; "
@@ -595,35 +718,48 @@ def initialize_schema() -> None:
         if not has_column(cursor, "users", "phone_verification_expires_at"):
             cursor.execute("ALTER TABLE users ADD COLUMN phone_verification_expires_at DATETIME NULL")
 
-        cursor.execute("SELECT COUNT(*) FROM places")
-        (place_count,) = cursor.fetchone() or (0,)
-
-        if place_count == 0:
-            for place in SEED_PLACES:
-                cursor.execute(
-                    """
-                    INSERT INTO places (
-                        id, name, country, state, city, type, image_query,
-                        summary, best_time, tags, transport, ticketing,
-                        challenge, underdog, lat, lon, source
-                    ) VALUES (
-                        %(id)s, %(name)s, %(country)s, %(state)s, %(city)s, %(type)s, %(image_query)s,
-                        %(summary)s, %(best_time)s, %(tags)s, %(transport)s, %(ticketing)s,
-                        %(challenge)s, %(underdog)s, %(lat)s, %(lon)s, %(source)s
-                    )
-                    """,
-                    {
-                        **place,
-                        "tags": json.dumps(place["tags"]),
-                        "transport": json.dumps(place["transport"]),
-                        "ticketing": json.dumps(place["ticketing"]),
-                        "underdog": json.dumps(place["underdog"]),
-                        "lat": place.get("lat"),
-                        "lon": place.get("lon"),
-                        "source": place.get("source"),
-                    },
+        for place in SEED_PLACES:
+            cursor.execute(
+                """
+                INSERT INTO places (
+                    id, name, country, state, city, type, image_query,
+                    summary, best_time, tags, transport, ticketing,
+                    challenge, underdog, lat, lon, source
+                ) VALUES (
+                    %(id)s, %(name)s, %(country)s, %(state)s, %(city)s, %(type)s, %(image_query)s,
+                    %(summary)s, %(best_time)s, %(tags)s, %(transport)s, %(ticketing)s,
+                    %(challenge)s, %(underdog)s, %(lat)s, %(lon)s, %(source)s
                 )
-            connection.commit()
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    country = VALUES(country),
+                    state = VALUES(state),
+                    city = VALUES(city),
+                    type = VALUES(type),
+                    image_query = VALUES(image_query),
+                    summary = VALUES(summary),
+                    best_time = VALUES(best_time),
+                    tags = VALUES(tags),
+                    transport = VALUES(transport),
+                    ticketing = VALUES(ticketing),
+                    challenge = VALUES(challenge),
+                    underdog = VALUES(underdog),
+                    lat = VALUES(lat),
+                    lon = VALUES(lon),
+                    source = VALUES(source)
+                """,
+                {
+                    **place,
+                    "tags": json.dumps(place["tags"]),
+                    "transport": json.dumps(place["transport"]),
+                    "ticketing": json.dumps(place["ticketing"]),
+                    "underdog": json.dumps(place["underdog"]),
+                    "lat": place.get("lat"),
+                    "lon": place.get("lon"),
+                    "source": place.get("source"),
+                },
+            )
+        connection.commit()
     finally:
         cursor.close()
         connection.close()
@@ -704,12 +840,12 @@ def api_geocode_place() -> Any:
 
 @app.get("/api/places")
 def api_places() -> Any:
-    return jsonify({"places": load_places() if DATABASE_READY else load_seed_places()})
+    return jsonify({"places": get_catalog_places()})
 
 
 @app.get("/api/catalog")
 def api_catalog() -> Any:
-    places = load_places() if DATABASE_READY else load_seed_places()
+    places = get_catalog_places()
     return jsonify({"catalog": build_catalog(places)})
 
 
@@ -721,7 +857,7 @@ def api_me() -> Any:
 @app.get("/api/bootstrap")
 def api_bootstrap() -> Any:
     user = get_current_user() if DATABASE_READY else None
-    places = load_places() if DATABASE_READY else load_seed_places()
+    places = get_catalog_places()
     payload = {
         "user": user,
         "places": places,
@@ -1250,6 +1386,17 @@ def load_places() -> list[dict[str, Any]]:
         connection.close()
 
 
+def get_catalog_places() -> list[dict[str, Any]]:
+    if not DATABASE_READY:
+        return load_seed_places()
+
+    merged_places = {place["id"]: place for place in load_seed_places()}
+    for place in load_places():
+        merged_places[place["id"]] = place
+
+    return list(merged_places.values())
+
+
 def normalize_place_row(row: dict[str, Any]) -> dict[str, Any]:
     underdog = parse_json_field(row.get("underdog"), {})
     return {
@@ -1358,6 +1505,21 @@ SEARCH_INTENT_RULES: list[dict[str, Any]] = [
         "keywords": ("fort", "palace", "heritage", "royal", "mirror work"),
         "preferredPlaceId": "amber-fort",
         "reason": "Heritage and royal-route searches usually map best to Amber Fort.",
+    },
+    {
+        "keywords": ("beach", "beaches", "coast", "shore", "seaside", "ocean", "sea", "sunset", "surf", "cliff"),
+        "preferredPlaceId": "varkala-cliff",
+        "reason": "Beach and sea-view searches usually map best to Varkala Cliff.",
+    },
+    {
+        "keywords": ("goa", "palolem", "crescent beach"),
+        "preferredPlaceId": "palolem-beach",
+        "reason": "South Goa beach searches usually map best to Palolem Beach.",
+    },
+    {
+        "keywords": ("chennai", "marina", "promenade"),
+        "preferredPlaceId": "marina-beach",
+        "reason": "Chennai coastline searches usually map best to Marina Beach.",
     },
     {
         "keywords": ("monument", "old city", "bazaar", "pearls", "bangles"),
@@ -1977,7 +2139,7 @@ def api_search_intent() -> Any:
     if not query:
         return jsonify({"error": "query is required."}), 400
 
-    places = load_places() if DATABASE_READY else load_seed_places()
+    places = get_catalog_places()
     normalized_query = re.sub(r"\s+", " ", query).strip()
 
     ranked_matches = rank_search_matches(query, country_filter, state_filter, type_filter, places)
