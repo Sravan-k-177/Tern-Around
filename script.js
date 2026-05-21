@@ -11,6 +11,7 @@ const signupUsernameInput = document.querySelector("#signup-username-input");
 const signupEmailInput = document.querySelector("#signup-email-input");
 const signupPasswordInput = document.querySelector("#signup-password-input");
 const signupConfirmPasswordInput = document.querySelector("#signup-confirm-password-input");
+const signupTermsInput = document.querySelector("#signup-terms-input");
 const verifyEmailInput = document.querySelector("#verify-email-input");
 const verifyCodeInput = document.querySelector("#verify-code-input");
 const goSignupButton = document.querySelector("#go-signup-button");
@@ -2713,7 +2714,8 @@ signupForm.addEventListener("submit", async (event) => {
     const data = await postJson("/api/signup", {
       username: signupUsernameInput.value.trim(),
       email: signupEmailInput.value.trim(),
-      password: signupPasswordInput.value
+      password: signupPasswordInput.value,
+      termsAccepted: signupTermsInput.checked
     });
     pendingVerificationEmail = data.email || signupEmailInput.value.trim().toLowerCase();
     verifyEmailInput.value = pendingVerificationEmail;

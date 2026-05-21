@@ -799,6 +799,11 @@ def index() -> Any:
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.get("/terms")
+def terms() -> Any:
+    return send_from_directory(BASE_DIR, "terms.html")
+
+
 @app.get("/style.css")
 def style_css() -> Any:
     return send_from_directory(BASE_DIR, "style.css")
@@ -1017,9 +1022,12 @@ def api_signup() -> Any:
     name = str(data.get("username", "")).strip()
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
+    terms_accepted = data.get("termsAccepted")
 
     if not name or not email or not password:
         return jsonify({"error": "Username, email, and password are required."}), 400
+    if not isinstance(terms_accepted, bool) or not terms_accepted:
+        return jsonify({"error": "You must accept the Terms and Conditions to create an account."}), 400
 
     password_error = validate_password(password)
     if password_error is not None:
