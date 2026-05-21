@@ -520,6 +520,31 @@ p {
   object-fit: cover;
 }
 
+/* Password field toggle styles */
+.field-with-toggle {
+  position: relative;
+}
+.field-with-toggle input {
+  padding-right: 46px; /* space for the toggle button */
+}
+.field-with-toggle .toggle-password {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.field-with-toggle .toggle-password:focus {
+  outline: 2px solid rgba(43,58,103,0.18);
+  border-radius: 6px;
+}
+
 .place-card span {
   display: grid;
   align-content: center;

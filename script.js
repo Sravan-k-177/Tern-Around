@@ -83,6 +83,43 @@ const PLACEHOLDER_IMAGE =
     </svg>
   `);
 
+// Password visibility toggles with icon swap (eye / eye-off)
+function setupPasswordToggles() {
+  const EYE_SVG =
+    '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"></path>' +
+    '<path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path>' +
+    '</svg>';
+
+  const EYE_OFF_SVG =
+    '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18"></path>' +
+    '<path stroke-linecap="round" stroke-linejoin="round" d="M10.94 5.94A9.965 9.965 0 0112 5c4.477 0 8.268 2.943 9.542 7-.346 1.104-.9 2.136-1.63 3.03"></path>' +
+    '<path stroke-linecap="round" stroke-linejoin="round" d="M9.88 9.88a3 3 0 004.24 4.24"></path>' +
+    '</svg>';
+
+  const buttons = document.querySelectorAll(".toggle-password");
+  buttons.forEach((btn) => {
+    // normalize icon
+    btn.innerHTML = EYE_SVG;
+
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      btn.setAttribute("aria-pressed", String(isPassword));
+      btn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+      // swap SVG to indicate state
+      btn.innerHTML = isPassword ? EYE_OFF_SVG : EYE_SVG;
+    });
+  });
+}
+
+// Initialize toggles immediately (script is loaded at end of body)
+setupPasswordToggles();
+
 const places = [
   {
     id: "gateway-of-india",

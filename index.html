@@ -9,8 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#6366f1">
   <title>Tern-Around</title>
-  <link rel="icon" type="image/png" href="favicon.ico" sizes="32x32">
-  <link rel="apple-touch-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -32,7 +31,15 @@
           required>
 
         <label for="login-password-input">Password</label>
-        <input id="login-password-input" name="password" type="password" placeholder="Enter password" required>
+        <div class="field-with-toggle">
+          <input id="login-password-input" name="password" type="password" placeholder="Enter password" required>
+          <button type="button" class="toggle-password" data-target="login-password-input" aria-pressed="false" aria-label="Show password">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path>
+            </svg>
+          </button>
+        </div>
 
         <p class="api-status" id="login-status" aria-live="polite"></p>
 
@@ -59,12 +66,28 @@
         <input id="signup-email-input" name="email" type="email" placeholder="you@example.com" required>
 
         <label for="signup-password-input">Password</label>
-        <input id="signup-password-input" name="password" type="password" placeholder="Create password"
-          minlength="8" autocomplete="new-password" required>
+        <div class="field-with-toggle">
+          <input id="signup-password-input" name="password" type="password" placeholder="Create password"
+            minlength="8" autocomplete="new-password" required>
+          <button type="button" class="toggle-password" data-target="signup-password-input" aria-pressed="false" aria-label="Show password">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path>
+            </svg>
+          </button>
+        </div>
 
         <label for="signup-confirm-password-input">Confirm Password</label>
-        <input id="signup-confirm-password-input" name="confirmPassword" type="password"
-          placeholder="Re-enter password" minlength="8" autocomplete="new-password" required>
+        <div class="field-with-toggle">
+          <input id="signup-confirm-password-input" name="confirmPassword" type="password"
+            placeholder="Re-enter password" minlength="8" autocomplete="new-password" required>
+          <button type="button" class="toggle-password" data-target="signup-confirm-password-input" aria-pressed="false" aria-label="Show password">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path>
+            </svg>
+          </button>
+        </div>
 
         <p class="form-help">Use at least 8 characters with uppercase, lowercase, a number, and a symbol.</p>
 
