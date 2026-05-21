@@ -788,6 +788,21 @@ def script_js() -> Any:
     return send_from_directory(BASE_DIR, "script.js")
 
 
+@app.get("/favicon.ico")
+def favicon_png() -> Any:
+    return send_from_directory(BASE_DIR, "favicon.ico")
+
+
+@app.get("/bird.svg")
+def bird_svg() -> Any:
+    return send_from_directory(BASE_DIR, "bird.svg")
+
+
+@app.get("/favicon.ico")
+def favicon() -> Any:
+    return send_from_directory(BASE_DIR, "favicon.ico")
+
+
 @app.post("/api/geocode-place")
 def api_geocode_place() -> Any:
     data = request.get_json(silent=True) or {}
