@@ -804,6 +804,11 @@ def terms() -> Any:
     return send_from_directory(BASE_DIR, "terms.html")
 
 
+@app.get("/about")
+def about() -> Any:
+    return send_from_directory(BASE_DIR, "about.html")
+
+
 @app.get("/style.css")
 def style_css() -> Any:
     return send_from_directory(BASE_DIR, "style.css")
