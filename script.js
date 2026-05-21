@@ -18,9 +18,11 @@ const goLoginButton = document.querySelector("#go-login-button");
 const resendCodeButton = document.querySelector("#resend-code-button");
 const verifyBackLoginButton = document.querySelector("#verify-back-login-button");
 const navExploreButton = document.querySelector("#nav-explore-button");
+const navBookingButton = document.querySelector("#nav-booking-button");
 const navWishlistButton = document.querySelector("#nav-wishlist-button");
 const openProfileButton = document.querySelector("#open-profile-button");
 const exploreSection = document.querySelector("#explore-section");
+const bookingSection = document.querySelector("#booking-section");
 const profileSection = document.querySelector("#profile-section");
 const wishlistSection = document.querySelector("#wishlist-section");
 const profileContactDetails = document.querySelector("#profile-contact-details");
@@ -611,11 +613,13 @@ function setAppSection(section) {
   activeAppSection = section;
   const badgesAllSection = document.getElementById("badges-all-section");
   exploreSection?.classList.toggle("is-hidden", section !== "explore");
+  bookingSection?.classList.toggle("is-hidden", section !== "booking");
   profileSection?.classList.toggle("is-hidden", section !== "profile");
   wishlistSection?.classList.toggle("is-hidden", section !== "wishlist");
   badgesAllSection?.classList.toggle("is-hidden", section !== "badges-all");
 
   navExploreButton?.classList.toggle("is-active", section === "explore");
+  navBookingButton?.classList.toggle("is-active", section === "booking");
   navWishlistButton?.classList.toggle("is-active", section === "wishlist");
 
   const mainTopBar = document.getElementById("main-top-bar");
@@ -2752,6 +2756,11 @@ navExploreButton?.addEventListener("click", () => {
   setAppSection("explore");
 });
 
+navBookingButton?.addEventListener("click", () => {
+  setAppSection("booking");
+  renderBookingDestination();
+});
+
 openProfileButton?.addEventListener("click", () => {
   setAppSection("profile");
   renderProfileDetails();
@@ -2759,6 +2768,11 @@ openProfileButton?.addEventListener("click", () => {
 
 document.querySelector("#close-profile-button")?.addEventListener("click", () => {
   setAppSection("explore");
+});
+
+document.querySelector("#booking-back-button")?.addEventListener("click", () => {
+  setAppSection("explore");
+  renderApp();
 });
 
 navWishlistButton?.addEventListener("click", () => {

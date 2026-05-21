@@ -144,6 +144,7 @@
       <!-- hidden element kept for script compat -->
       <nav class="app-nav">
         <span id="pass-status" class="is-hidden">Explorer Select</span>
+        <button type="button" class="app-nav-button" id="nav-booking-button">Book</button>
         <button type="button" class="app-nav-button" id="nav-wishlist-button">Wishlist</button>
       </nav>
 
@@ -185,6 +186,21 @@
 
           <article class="detail-panel" id="detail-panel" aria-live="polite"></article>
         </section>
+
+      </section>
+
+      <section class="is-hidden" id="booking-section" aria-label="Booking section">
+        <header class="profile-page-header">
+          <div class="profile-header-left">
+            <button type="button" class="back-button" id="booking-back-button">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+              </svg>
+              Back to Explore
+            </button>
+            <h1 class="profile-page-title">Book</h1>
+          </div>
+        </header>
 
         <section class="booking-panel" aria-labelledby="booking-title">
           <div class="section-heading">
