@@ -520,7 +520,8 @@ const places = [
   }
 ];
 
-let selectedPlaceId = places[0]?.id || "";
+const requestedPlaceId = new URLSearchParams(window.location.search).get("placeId") || "";
+let selectedPlaceId = requestedPlaceId || places[0]?.id || "";
 let apiPlaces = [];
 let completedQuestIds = new Set();
 let currentUser = null;
@@ -549,6 +550,7 @@ const coordinateCache = new Map();
 const destinationAirportCache = new Map();
 let backendPlaces = [];
 const HIDDEN_EXPLORE_PLACE_IDS_KEY = "tern-hidden-explore-place-ids";
+const SELECTED_UNDERDOG_PLACE_KEY = "tern-selected-underdog-place";
 
 /* ── Avatar system ── */
 const AVATARS = [
@@ -630,6 +632,25 @@ function setAppSection(section) {
   const hideTopChrome = section === "profile" || section === "badges-all";
   mainTopBar?.classList.toggle("is-hidden", hideTopChrome);
   mainAppNav?.classList.toggle("is-hidden", hideTopChrome);
+}
+
+function getPlaceContext(place) {
+  return {
+    placeId: place.id,
+    placeName: place.name,
+    placeCity: place.city,
+    placeState: place.state,
+    placeCountry: place.country,
+    placeType: place.type
+  };
+}
+
+function buildUnderdogEditorUrl(place) {
+  return `/underdog-location?${new URLSearchParams(getPlaceContext(place)).toString()}`;
+}
+
+function saveSelectedUnderdogPlace(place) {
+  localStorage.setItem(SELECTED_UNDERDOG_PLACE_KEY, JSON.stringify(getPlaceContext(place)));
 }
 
 function escapeHtml(value) {
@@ -1584,6 +1605,17 @@ function renderDetailPanel() {
       <section class="hidden-panel ${canReveal ? "is-unlocked" : ""}" aria-label="Hidden underdog spot">
         ${renderHiddenSpot(place, isSelectCustomer, questComplete)}
       </section>
+
+      <section class="underdog-editor-panel" aria-label="Underdog location details">
+        <div>
+          <span class="section-kicker">Underdog</span>
+          <h3>Share a nearby hidden location</h3>
+          <p>Open a dedicated form to add underdog location details for ${escapeHtml(place.name)}.</p>
+        </div>
+        <button class="primary-action underdog-editor-button" type="button" id="open-underdog-location-button">
+          Add underdog location details
+        </button>
+      </section>
     </div>
   `;
 
@@ -1662,6 +1694,11 @@ function renderDetailPanel() {
     } catch (error) {
       apiStatus.textContent = error.message;
     }
+  });
+
+  document.querySelector("#open-underdog-location-button")?.addEventListener("click", () => {
+    saveSelectedUnderdogPlace(place);
+    window.location.assign(buildUnderdogEditorUrl(place));
   });
 
   const captureVisitButton = document.querySelector("#capture-visit-button");

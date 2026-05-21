@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#2b3a67">
+  <title>Underdog Location Details</title>
+  <link rel="icon" type="image/png" sizes="any" href="favicon.png?v=2">
+  <link rel="shortcut icon" href="favicon.ico?v=2">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="legal-page underdog-page">
+  <main class="legal-shell underdog-shell">
+    <p class="eyebrow">Tern-Around</p>
+    <h1>Underdog location details</h1>
+    <p class="legal-meta" id="page-intro">Open a selected place from Explore to add its nearby underdog location.</p>
+
+    <div class="underdog-layout">
+      <section class="underdog-summary-card" aria-labelledby="selected-place-name">
+        <span class="section-kicker">Selected location</span>
+        <h2 id="selected-place-name">No location selected</h2>
+        <p id="selected-place-meta">Choose a place in Explore, then use the underdog button to open this form.</p>
+        <dl class="underdog-summary-list">
+          <div>
+            <dt>Type</dt>
+            <dd id="selected-place-type">-</dd>
+          </div>
+          <div>
+            <dt>State</dt>
+            <dd id="selected-place-state">-</dd>
+          </div>
+        </dl>
+        <p class="source-note">Saved drafts stay in your browser on this device.</p>
+      </section>
+
+      <section class="underdog-form-card" aria-label="Underdog form">
+        <form class="underdog-form" id="underdog-form">
+          <div class="underdog-form-header">
+            <span class="section-kicker">Underdog details</span>
+            <h2>Shape the hidden stop</h2>
+            <p>Use the fields below to turn a nearby lane, corner, or pocket market into a clear destination.</p>
+          </div>
+
+          <div class="underdog-form-grid">
+            <label class="underdog-field full-width">
+              <span class="underdog-field-label">Underdog name</span>
+              <span class="underdog-field-hint">Pick a name people can remember when they ask for directions.</span>
+              <input id="underdog-name" name="name" type="text" placeholder="Riverside market lane" required>
+            </label>
+
+            <label class="underdog-field">
+              <span class="underdog-field-label">Distance from main spot</span>
+              <span class="underdog-field-hint">Keep it short and human-friendly.</span>
+              <input id="underdog-distance" name="distance" type="text" placeholder="1.2 km" required>
+            </label>
+
+            <label class="underdog-field">
+              <span class="underdog-field-label">Best transport</span>
+              <span class="underdog-field-hint">Mention the easiest way to get there.</span>
+              <input id="underdog-transport" name="transport" type="text" placeholder="10 min walk or rickshaw" required>
+            </label>
+
+            <label class="underdog-field full-width">
+              <span class="underdog-field-label">Description</span>
+              <span class="underdog-field-hint">Explain what makes this detour worth the extra stop.</span>
+              <textarea id="underdog-description" name="description" rows="6"
+                placeholder="What makes this underdog spot worth visiting?" required></textarea>
+            </label>
+          </div>
+
+          <p class="api-status underdog-status" id="underdog-status" aria-live="polite"></p>
+
+          <div class="underdog-actions">
+            <button class="primary-action" type="submit">Save underdog details</button>
+            <a class="secondary-action underdog-link" id="return-to-explore-link" href="/">Return to Explore</a>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "tern-underdog-drafts";
+      const SELECTED_PLACE_KEY = "tern-selected-underdog-place";
+
+      const form = document.getElementById("underdog-form");
+      const status = document.getElementById("underdog-status");
+      const nameInput = document.getElementById("underdog-name");
+      const distanceInput = document.getElementById("underdog-distance");
+      const transportInput = document.getElementById("underdog-transport");
+      const descriptionInput = document.getElementById("underdog-description");
+      const placeNameEl = document.getElementById("selected-place-name");
+      const placeMetaEl = document.getElementById("selected-place-meta");
+      const placeTypeEl = document.getElementById("selected-place-type");
+      const placeStateEl = document.getElementById("selected-place-state");
+      const returnLink = document.getElementById("return-to-explore-link");
+      const intro = document.getElementById("page-intro");
+      const submitButton = form.querySelector("button[type='submit']");
+
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = {
+        placeId: params.get("placeId") || "",
+        placeName: params.get("placeName") || "",
+        placeCity: params.get("placeCity") || "",
+        placeState: params.get("placeState") || "",
+        placeCountry: params.get("placeCountry") || "",
+        placeType: params.get("placeType") || ""
+      };
+
+      function readStoredPlace() {
+        try {
+          return JSON.parse(localStorage.getItem(SELECTED_PLACE_KEY) || "null");
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function readDrafts() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function writeDrafts(drafts) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+      }
+
+      const storedPlace = readStoredPlace();
+      const selectedPlace = fromQuery.placeId ? fromQuery : storedPlace;
+
+      if (selectedPlace?.placeId) {
+        const placeLabel = [
+          selectedPlace.placeName,
+          selectedPlace.placeCity,
+          selectedPlace.placeState,
+          selectedPlace.placeCountry
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        placeNameEl.textContent = selectedPlace.placeName || "Selected location";
+        placeMetaEl.textContent = placeLabel || "Selected location details";
+        placeTypeEl.textContent = selectedPlace.placeType || "-";
+        placeStateEl.textContent = selectedPlace.placeState || "-";
+        intro.textContent = "Fill in the nearby underdog location details for the selected place.";
+        returnLink.href = `/?placeId=${encodeURIComponent(selectedPlace.placeId)}`;
+      } else {
+        placeNameEl.textContent = "No location selected";
+        placeMetaEl.textContent = "Choose a place in Explore, then use the underdog button to open this form.";
+        placeTypeEl.textContent = "-";
+        placeStateEl.textContent = "-";
+        intro.textContent = "This page opens best from a selected place inside Explore.";
+        submitButton.disabled = true;
+        status.textContent = "No selected place was found. Return to Explore and choose a location first.";
+        returnLink.textContent = "Back to home";
+      }
+
+      const existingDrafts = readDrafts();
+      const existingDraft = selectedPlace?.placeId ? existingDrafts[selectedPlace.placeId] : null;
+
+      if (existingDraft) {
+        nameInput.value = existingDraft.name || "";
+        distanceInput.value = existingDraft.distance || "";
+        transportInput.value = existingDraft.transport || "";
+        descriptionInput.value = existingDraft.description || "";
+        status.textContent = "Loaded your saved draft for this location.";
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        if (!selectedPlace?.placeId) {
+          status.textContent = "Select a location first.";
+          return;
+        }
+
+        const draft = {
+          placeId: selectedPlace.placeId,
+          placeName: selectedPlace.placeName || "",
+          placeCity: selectedPlace.placeCity || "",
+          placeState: selectedPlace.placeState || "",
+          placeCountry: selectedPlace.placeCountry || "",
+          placeType: selectedPlace.placeType || "",
+          name: nameInput.value.trim(),
+          distance: distanceInput.value.trim(),
+          transport: transportInput.value.trim(),
+          description: descriptionInput.value.trim(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const drafts = readDrafts();
+        drafts[selectedPlace.placeId] = draft;
+        writeDrafts(drafts);
+
+        status.textContent = `Saved underdog details for ${selectedPlace.placeName || "this location"}.`;
+        status.classList.remove("error");
+        status.classList.add("success");
+      });
+    })();
+  </script>
+</body>
+
+</html>

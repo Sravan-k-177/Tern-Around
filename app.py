@@ -809,6 +809,11 @@ def about() -> Any:
     return send_from_directory(BASE_DIR, "about.html")
 
 
+@app.get("/underdog-location")
+def underdog_location() -> Any:
+    return send_from_directory(BASE_DIR, "underdog-location.html")
+
+
 @app.get("/style.css")
 def style_css() -> Any:
     return send_from_directory(BASE_DIR, "style.css")
