@@ -498,6 +498,12 @@ TABLES_SQL = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
     """
+    CREATE TABLE IF NOT EXISTS hidden_places (
+        place_id VARCHAR(80) PRIMARY KEY,
+        hidden_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_completions (
         user_id INT NOT NULL,
         place_id VARCHAR(80) NOT NULL,
@@ -532,6 +538,21 @@ def connect_without_database() -> mysql.connector.MySQLConnection:
 
 def connect_database() -> mysql.connector.MySQLConnection:
     return mysql.connector.connect(**MYSQL_CONFIG)
+
+
+def get_hidden_place_ids() -> set[str]:
+    if not DATABASE_READY:
+        return set()
+
+    connection = connect_database()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT place_id FROM hidden_places")
+        return {str(row["place_id"]) for row in cursor.fetchall() if row.get("place_id")}
+    finally:
+        cursor.close()
+        connection.close()
 
 
 def has_column(cursor: mysql.connector.cursor.MySQLCursor, table_name: str, column_name: str) -> bool:
@@ -877,10 +898,47 @@ def api_bootstrap() -> Any:
         "user": user,
         "places": places,
         "catalog": build_catalog(places),
+        "hiddenPlaceIds": sorted(list(get_hidden_place_ids())) if DATABASE_READY else [],
         "completedQuestIds": sorted(list(get_completed_quests(user["id"])) if user else []),
         "wishlistEntries": get_wishlist_entries(user["id"]) if user else [],
     }
     return jsonify(payload)
+
+
+@app.post("/api/places/hide")
+def api_hide_place() -> Any:
+    if not DATABASE_READY:
+        return jsonify({"error": "MySQL is not ready."}), 503
+
+    if not get_current_user():
+        return jsonify({"error": "Log in to remove a place from Explore."}), 401
+
+    data = request.get_json(silent=True) or {}
+    place_id = str(data.get("placeId", "")).strip()
+    if not place_id:
+        return jsonify({"error": "placeId is required."}), 400
+
+    connection = connect_database()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO hidden_places (place_id)
+            VALUES (%s)
+            ON DUPLICATE KEY UPDATE hidden_at = CURRENT_TIMESTAMP
+            """,
+            (place_id,),
+        )
+        connection.commit()
+        return jsonify({
+            "ok": True,
+            "hiddenPlaceIds": sorted(list(get_hidden_place_ids())),
+            "places": get_catalog_places(),
+        })
+    finally:
+        cursor.close()
+        connection.close()
 
 
 @app.post("/api/login")
@@ -1382,6 +1440,8 @@ def load_places() -> list[dict[str, Any]]:
     if not DATABASE_READY:
         return load_seed_places()
 
+    hidden_place_ids = get_hidden_place_ids()
+
     connection = connect_database()
     cursor = connection.cursor(dictionary=True)
 
@@ -1395,7 +1455,7 @@ def load_places() -> list[dict[str, Any]]:
             """
         )
         rows = cursor.fetchall()
-        return [normalize_place_row(row) for row in rows]
+        return [normalize_place_row(row) for row in rows if str(row["id"]) not in hidden_place_ids]
     finally:
         cursor.close()
         connection.close()
@@ -1405,11 +1465,12 @@ def get_catalog_places() -> list[dict[str, Any]]:
     if not DATABASE_READY:
         return load_seed_places()
 
+    hidden_place_ids = get_hidden_place_ids()
     merged_places = {place["id"]: place for place in load_seed_places()}
     for place in load_places():
         merged_places[place["id"]] = place
 
-    return list(merged_places.values())
+    return [place for place in merged_places.values() if place["id"] not in hidden_place_ids]
 
 
 def normalize_place_row(row: dict[str, Any]) -> dict[str, Any]:

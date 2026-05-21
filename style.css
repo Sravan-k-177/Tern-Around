@@ -545,6 +545,13 @@ p {
   border-radius: 6px;
 }
 
+/* Tag chips in detail panel */
+.tags-panel { margin: 12px 0; }
+.tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.tag-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: #f3f4f6; border: 1px solid var(--line); color: var(--accent-dark); font-weight: 700; cursor: default; }
+.tag-chip .tag-remove { display: inline-flex; align-items: center; justify-content: center; margin-left: 6px; padding: 2px; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.tag-chip .tag-remove:hover { color: var(--coral); }
+
 .place-card span {
   display: grid;
   align-content: center;

@@ -530,6 +530,7 @@ let userAirport = null;
 let userAirportLookupStarted = false;
 let pendingVerificationEmail = "";
 let wishlistEntries = [];
+let hiddenPlaceIds = new Set();
 let activeCameraStream = null;
 let profileExtras = {
   phone: "",
@@ -542,6 +543,7 @@ const imageCache = new Map();
 const coordinateCache = new Map();
 const destinationAirportCache = new Map();
 let backendPlaces = [];
+const HIDDEN_EXPLORE_PLACE_IDS_KEY = "tern-hidden-explore-place-ids";
 
 /* ── Avatar system ── */
 const AVATARS = [
@@ -840,7 +842,36 @@ function saveProfileExtras() {
 }
 
 function getAllPlaces() {
-  return [...(backendPlaces.length > 0 ? backendPlaces : places), ...apiPlaces];
+  return [...(backendPlaces.length > 0 ? backendPlaces : places), ...apiPlaces].filter(
+    (place) => place && !hiddenPlaceIds.has(String(place.id))
+  );
+}
+
+function syncHiddenExplorePlaceIds(placeIds) {
+  hiddenPlaceIds = new Set((placeIds || []).map((value) => String(value)));
+}
+
+async function hidePlaceFromExplore(placeId) {
+  const data = await postJson("/api/places/hide", { placeId });
+  syncHiddenExplorePlaceIds(data.hiddenPlaceIds || []);
+  backendPlaces = data.places || backendPlaces;
+  return data;
+}
+
+/** Remove a tag from a place in-memory (affects current session). */
+function removeTagFromPlace(placeId, tag) {
+  const arrays = [backendPlaces, apiPlaces, places];
+  for (const arr of arrays) {
+    const p = arr.find((pl) => pl && pl.id === placeId);
+    if (p && Array.isArray(p.tags)) {
+      const idx = p.tags.findIndex((t) => String(t).toLowerCase() === String(tag).toLowerCase());
+      if (idx >= 0) {
+        p.tags.splice(idx, 1);
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 async function fetchJson(url, options = {}) {
@@ -876,6 +907,7 @@ async function loadBootstrapData() {
     const data = await fetchJson("/api/bootstrap");
     backendPlaces = data.places || [];
     locationCatalog = data.catalog || [];
+    syncHiddenExplorePlaceIds(data.hiddenPlaceIds || []);
     completedQuestIds = new Set(data.completedQuestIds || []);
     wishlistEntries = data.wishlistEntries || [];
     currentUser = data.user || null;
@@ -1429,6 +1461,24 @@ function renderDetailPanel() {
       ${place.source ? `<p class="source-note">Location data from ${place.source}.</p>` : ""}
       ${renderImageSource(place)}
 
+      ${place.tags && place.tags.length ? `
+      <section class="tags-panel" aria-label="Place tags">
+        <h3>Tags</h3>
+        <div class="tag-list">
+          ${place.tags
+            .map(
+              (t) => `
+                <button type="button" class="tag-chip" data-tag="${escapeHtml(t)}">
+                  ${escapeHtml(t)}
+                  <span class="tag-remove" aria-hidden="true">✕</span>
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+      </section>
+      ` : ""}
+
       <section class="transport-panel" aria-label="Transport options">
         <h3>Transportation</h3>
         <ul>
@@ -1463,6 +1513,9 @@ function renderDetailPanel() {
           <button class="secondary-action" type="button" id="wishlist-toggle">
             ${isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
           </button>
+          <button class="secondary-action" type="button" id="hide-place-button">
+            Remove from Explore
+          </button>
           <button class="secondary-action" type="button" id="capture-visit-button">
             ${questComplete ? "Capture again" : "Capture visit"}
           </button>
@@ -1493,6 +1546,22 @@ function renderDetailPanel() {
     }
   });
 
+  // Attach handlers for tag removal buttons in the detail panel
+  document.querySelectorAll(".tag-chip .tag-remove").forEach((rem) => {
+    rem.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const chip = rem.closest(".tag-chip");
+      if (!chip) return;
+      const tag = chip.getAttribute("data-tag");
+      if (!tag) return;
+      const removed = removeTagFromPlace(place.id, tag);
+      if (removed) {
+        // re-render the app to reflect change
+        renderApp();
+      }
+    });
+  });
+
   document.querySelector("#wishlist-toggle").addEventListener("click", async () => {
     if (!currentUser) {
       apiStatus.textContent = "Log in to save places to your wishlist.";
@@ -1514,6 +1583,30 @@ function renderDetailPanel() {
             type: place.type
           });
       wishlistEntries = data.wishlistEntries || [];
+      renderApp();
+    } catch (error) {
+      apiStatus.textContent = error.message;
+    }
+  });
+
+  document.querySelector("#hide-place-button")?.addEventListener("click", async () => {
+    if (!currentUser) {
+      apiStatus.textContent = "Log in to remove places from Explore.";
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove ${place.name} from Explore for everyone? This will hide it globally.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const data = await hidePlaceFromExplore(place.id);
+      selectedPlaceId = getAllPlaces()[0]?.id || "";
+      hiddenPlaceIds = new Set(data.hiddenPlaceIds || []);
       renderApp();
     } catch (error) {
       apiStatus.textContent = error.message;
