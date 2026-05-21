@@ -534,6 +534,8 @@ let pendingVerificationEmail = "";
 let wishlistEntries = [];
 let hiddenPlaceIds = new Set();
 let activeCameraStream = null;
+let activeCameraFacingMode = "environment";
+let geoPermissionState = "unknown";
 let profileExtras = {
   phone: "",
   phoneVerified: false,
@@ -706,9 +708,34 @@ function requestGeoPosition(options) {
   });
 }
 
+async function refreshGeoPermissionState() {
+  if (!navigator.permissions?.query) {
+    return geoPermissionState;
+  }
+
+  try {
+    const permission = await navigator.permissions.query({ name: "geolocation" });
+    geoPermissionState = permission.state;
+    permission.onchange = () => {
+      geoPermissionState = permission.state;
+    };
+  } catch (error) {
+    geoPermissionState = "unknown";
+  }
+
+  return geoPermissionState;
+}
+
 async function getCurrentGeoPosition() {
   if (!navigator.geolocation) {
     throw new Error("Geolocation is not supported in this browser.");
+  }
+
+  await refreshGeoPermissionState();
+  if (geoPermissionState === "denied") {
+    throw new Error(
+      "Location access is blocked in this browser. Open Page Info, reset site permissions, or enter your origin airport manually."
+    );
   }
 
   try {
@@ -728,7 +755,7 @@ async function getCurrentGeoPosition() {
       });
     } catch (secondaryError) {
       throw new Error(
-        "Could not get device location. Turn on Location Services, keep Wi-Fi enabled, allow browser location permission, and retry."
+        "Could not get device location. Turn on Location Services, keep Wi-Fi enabled, allow browser location permission, or enter your origin manually."
       );
     }
   }
@@ -755,23 +782,36 @@ function stopCameraStream() {
   activeCameraStream = null;
 }
 
-async function startCameraStream(videoElement) {
+async function startCameraStream(videoElement, facingMode = activeCameraFacingMode) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Camera access is not supported in this browser.");
   }
 
   stopCameraStream();
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: {
-        ideal: "environment"
-      }
-    },
-    audio: false
-  });
+  activeCameraFacingMode = facingMode;
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { exact: facingMode } },
+      audio: false
+    });
+  } catch (error) {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode } },
+      audio: false
+    });
+  }
+
   activeCameraStream = stream;
   videoElement.srcObject = stream;
+  videoElement.classList.toggle("is-flipped", facingMode === "user");
   await videoElement.play();
+}
+
+async function flipCameraStream(videoElement) {
+  const nextFacingMode = activeCameraFacingMode === "environment" ? "user" : "environment";
+  await startCameraStream(videoElement, nextFacingMode);
 }
 
 function upsertVisitedEntry(placeId, updates = {}) {
@@ -1186,8 +1226,13 @@ async function ensureDestinationAirport(place) {
   }
 }
 
-function detectUserNearestAirport() {
+async function detectUserNearestAirport() {
   if (!navigator.geolocation || userAirport || userAirportLookupStarted) {
+    return;
+  }
+
+  await refreshGeoPermissionState();
+  if (geoPermissionState === "denied") {
     return;
   }
 
@@ -1528,6 +1573,7 @@ function renderDetailPanel() {
           <video id="visit-camera-preview" playsinline muted></video>
           <div class="visit-capture-actions">
             <button class="primary-action" type="button" id="capture-photo-button">Take photo and verify</button>
+            <button class="secondary-action" type="button" id="flip-camera-button">Flip camera</button>
             <button class="text-action" type="button" id="close-capture-button">Close</button>
           </div>
           <p class="capture-status" id="capture-status" aria-live="polite"></p>
@@ -1621,6 +1667,7 @@ function renderDetailPanel() {
   const visitCapturePanel = document.querySelector("#visit-capture-panel");
   const cameraPreview = document.querySelector("#visit-camera-preview");
   const capturePhotoButton = document.querySelector("#capture-photo-button");
+  const flipCameraButton = document.querySelector("#flip-camera-button");
   const closeCaptureButton = document.querySelector("#close-capture-button");
   const captureStatus = document.querySelector("#capture-status");
 
@@ -1635,7 +1682,7 @@ function renderDetailPanel() {
     captureStatus.classList.remove("success", "error");
 
     try {
-      await startCameraStream(cameraPreview);
+      await startCameraStream(cameraPreview, activeCameraFacingMode);
       captureStatus.textContent = "Camera ready. Capture your visit photo on-site.";
     } catch (error) {
       captureStatus.textContent = error.message;
@@ -1648,6 +1695,26 @@ function renderDetailPanel() {
     visitCapturePanel?.classList.add("is-hidden");
     captureStatus.textContent = "";
     captureStatus.classList.remove("success", "error");
+  });
+
+  flipCameraButton?.addEventListener("click", async () => {
+    if (!cameraPreview) {
+      return;
+    }
+
+    flipCameraButton.disabled = true;
+    captureStatus.textContent = "Switching camera...";
+    captureStatus.classList.remove("success", "error");
+
+    try {
+      await flipCameraStream(cameraPreview);
+      captureStatus.textContent = activeCameraFacingMode === "user" ? "Front camera active." : "Rear camera active.";
+    } catch (error) {
+      captureStatus.textContent = error.message;
+      captureStatus.classList.add("error");
+    } finally {
+      flipCameraButton.disabled = false;
+    }
   });
 
   capturePhotoButton?.addEventListener("click", async () => {
