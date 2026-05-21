@@ -2525,5 +2525,10 @@ document.getElementById("badges-back-button")?.addEventListener("click", () => {
   renderProfileDetails();
 });
 
+document.getElementById("wishlist-back-button")?.addEventListener("click", () => {
+  setAppSection("explore");
+  renderApp();
+});
+
 renderApp();
 loadBootstrapData();
